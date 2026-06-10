@@ -4,7 +4,14 @@
 
 <h1 align="center">MailKeep</h1>
 
-A native macOS app to **back up and restore IMAP mailboxes** as standard `.mbox` files — no dependency on Apple Mail, no third-party service.
+<p align="center">
+  A native macOS app to <strong>back up and restore IMAP mailboxes</strong> as standard <code>.mbox</code> files.<br>
+  No dependency on Apple Mail, no third-party service.
+</p>
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="MailKeep screenshot" width="900">
+</p>
 
 Direct IMAP/TLS connection on port 993, incremental backups, full local archive in an open format you actually own.
 
