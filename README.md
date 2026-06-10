@@ -15,8 +15,6 @@
 
 Direct IMAP/TLS connection on port 993, incremental backups, full local archive in an open format you actually own.
 
-> **Status:** version **1.5** — macOS 14 (Sonoma) or later, Apple Silicon & Intel.
-
 ---
 
 ## Features
