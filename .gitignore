@@ -1,6 +1,11 @@
 # macOS
 .DS_Store
 
+# Local mailbox backups (user data — never commit)
+Mails/
+*.mbox
+*_index.json
+
 # Xcode user-specific state
 xcuserdata/
 *.xcuserstate
