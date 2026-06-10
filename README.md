@@ -1,4 +1,8 @@
-# MailKeep
+<p align="center">
+  <img src="icon.svg" alt="MailKeep" width="128" height="128">
+</p>
+
+<h1 align="center">MailKeep</h1>
 
 A native macOS app to **back up and restore IMAP mailboxes** as standard `.mbox` files — no dependency on Apple Mail, no third-party service.
 
