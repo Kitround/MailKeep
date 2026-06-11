@@ -7,12 +7,18 @@ struct MailKeepApp: App {
     @StateObject private var scheduler = SchedulerService()
 
     var body: some Scene {
-        WindowGroup("MailKeep") {
+        WindowGroup("MailKeep", id: "main") {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(backupEngine)
                 .onAppear {
                     backupEngine.appState = appState
+                    #if DEBUG
+                    if DemoSeeder.isActive {
+                        DemoSeeder.seed(into: appState)
+                        return
+                    }
+                    #endif
                     scheduler.start(appState: appState, engine: backupEngine)
                 }
         }

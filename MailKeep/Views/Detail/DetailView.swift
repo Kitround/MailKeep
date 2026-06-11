@@ -71,7 +71,7 @@ struct FolderDetailView: View {
                         Task { await backupEngine.backupFolder(account: account, folder: folder) }
                     } label: {
                         Label(isFolderBacking ? "Backup en cours…" : "Sauvegarder maintenant",
-                              systemImage: isFolderBacking ? "arrow.trianglehead.2.clockwise" : "arrow.down.circle.fill")
+                              systemImage: isFolderBacking ? "arrow.triangle.2.circlepath" : "arrow.down.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(isFolderBacking)   // seulement ce dossier, pas tous les backups

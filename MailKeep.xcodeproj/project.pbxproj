@@ -35,6 +35,7 @@
 		9278997A0236B0315FAAD03A /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5525DB60E3EC31574AFCA81C /* MenuBarView.swift */; };
 		92C443C9BF6428D48B815C4B /* BackupRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDBB8AD86B3A93DCC0039AC /* BackupRecord.swift */; };
 		9EDEE401057232F7AD3614AB /* SchedulerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2200602ABF1CCF81008805 /* SchedulerService.swift */; };
+		A1B2C3D400000000000000A2 /* DemoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000000A1 /* DemoSeeder.swift */; };
 		A15E23AD581EB36BB05AC533 /* BackupRunRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94114C44211C1EBD08CFE781 /* BackupRunRowView.swift */; };
 		A18C59892D709DC43F44F07F /* EmailRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E03F9D321C6EBF6D9068995D /* EmailRowView.swift */; };
 		A43DEF2DA7B21C3CFA77165A /* EmailListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D565815D0D3C7B99FADDDD /* EmailListView.swift */; };
@@ -75,6 +76,7 @@
 		8AD7DFA796E57E53E3F202B7 /* BackupHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupHistoryView.swift; sourceTree = "<group>"; };
 		8AD804312F96670800ADD8BA /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = AppIcon.icon; path = MailKeep/AppIcon.icon; sourceTree = SOURCE_ROOT; };
 		8C2200602ABF1CCF81008805 /* SchedulerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchedulerService.swift; sourceTree = "<group>"; };
+		A1B2C3D400000000000000A1 /* DemoSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoSeeder.swift; sourceTree = "<group>"; };
 		94114C44211C1EBD08CFE781 /* BackupRunRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRunRowView.swift; sourceTree = "<group>"; };
 		962F334A460EA0D6B9F78F8A /* AccountRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountRowView.swift; sourceTree = "<group>"; };
 		AA01BB02CC03DD04EE05FF06 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -160,6 +162,7 @@
 		93B4CBF431894FDA34CFC909 /* MailKeep */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D400000000000000A3 /* Demo */,
 				DACFAC7E22EAF961DC3DC201 /* Engine */,
 				F61B743E936BE7F56809AE68 /* IMAP */,
 				6FA3E1790BE23A9690E43AA2 /* Models */,
@@ -215,6 +218,14 @@
 				8C2200602ABF1CCF81008805 /* SchedulerService.swift */,
 			);
 			path = Engine;
+			sourceTree = "<group>";
+		};
+		A1B2C3D400000000000000A3 /* Demo */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D400000000000000A1 /* DemoSeeder.swift */,
+			);
+			path = Demo;
 			sourceTree = "<group>";
 		};
 		E015290C4D7D81E7064633C9 /* Settings */ = {
@@ -361,6 +372,7 @@
 				7B385408D3D3EDA5747E1D63 /* RestoreMessageView.swift in Sources */,
 				BA3EC3D279F2769AE7AE6A04 /* RestoreView.swift in Sources */,
 				9EDEE401057232F7AD3614AB /* SchedulerService.swift in Sources */,
+				A1B2C3D400000000000000A2 /* DemoSeeder.swift in Sources */,
 				5D4417CFDC34688E673D6A06 /* SidebarView.swift in Sources */,
 				7875F0A8F1D53FDA17A5A8FC /* StateStore.swift in Sources */,
 				EB8AE4003F67845EE0E8E358 /* WebView.swift in Sources */,

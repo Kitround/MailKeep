@@ -43,6 +43,9 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 
 ## Quick start
 
+> **Gmail / iCloud note:** OAuth2 is not supported yet — these providers require an
+> [app-specific password](https://support.google.com/accounts/answer/185833) instead of your regular password.
+
 1. **Add an account** — server, username, password. Click **Test connection**.
 2. **Pick folders** to back up (INBOX, Sent, Archives…).
 3. **Choose what to back up** — by default only read messages are saved; switch to *All* if you want everything.

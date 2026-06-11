@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var backupEngine: BackupEngine
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -31,8 +32,10 @@ struct MenuBarView: View {
             .disabled(appState.isRunningBackup || appState.accounts.isEmpty || appState.backupBaseURL == nil)
 
             Button("Ouvrir MailKeep") {
+                // openWindow recrée la fenêtre si elle a été fermée —
+                // NSApp.windows.first ne marchait plus dans ce cas.
+                openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
-                NSApp.windows.first?.makeKeyAndOrderFront(nil)
             }
 
             Divider()

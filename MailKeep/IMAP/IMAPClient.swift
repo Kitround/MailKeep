@@ -18,6 +18,25 @@ actor IMAPClient {
         )
         self.connection = conn
 
+        // Watchdog: a server that never reaches .ready must not hang the app forever.
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await self.waitForReady(conn)
+            }
+            group.addTask { [timeoutSeconds] in
+                try await Task.sleep(for: .seconds(timeoutSeconds))
+                conn.cancel()
+                throw IMAPError.timeout
+            }
+            defer { group.cancelAll() }
+            _ = try await group.next()
+        }
+
+        // Discard server greeting
+        _ = try await receiveLine()
+    }
+
+    private func waitForReady(_ conn: NWConnection) async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             self.connectContinuation = cont
             conn.stateUpdateHandler = { [weak self] state in
@@ -26,9 +45,6 @@ actor IMAPClient {
             }
             conn.start(queue: .global(qos: .userInitiated))
         }
-
-        // Discard server greeting
-        _ = try await receiveLine()
     }
 
     private func handleConnectState(_ state: NWConnection.State) {
@@ -52,13 +68,24 @@ actor IMAPClient {
 
     func login(username: String, password: String) async throws {
         let tag = nextTag()
-        let cmd = "\(tag) LOGIN \(IMAPParser.quote(username)) \(IMAPParser.quote(password))\r\n"
-        try await sendRaw(cmd)
+        if password.allSatisfy(\.isASCII) && !password.contains("\r") && !password.contains("\n") {
+            let cmd = "\(tag) LOGIN \(IMAPParser.quote(username)) \(IMAPParser.quote(password))\r\n"
+            try await sendRaw(cmd)
+        } else {
+            // RFC 3501 quoted strings are 7-bit only — send non-ASCII passwords as a literal.
+            let pwBytes = Data(password.utf8)
+            try await sendRaw("\(tag) LOGIN \(IMAPParser.quote(username)) {\(pwBytes.count)}\r\n")
+            let contLine = try await receiveLine()
+            guard contLine.hasPrefix("+") else {
+                throw IMAPError.authenticationFailed(contLine)
+            }
+            try await sendData(pwBytes)
+            try await sendRaw("\r\n")
+        }
         let resp = try await awaitTagged(tag: tag)
-        guard case .tagged(_, let status, let text) = resp.tagged, status == .ok else {
+        guard case .tagged(_, let status, _) = resp.tagged, status == .ok else {
             throw IMAPError.authenticationFailed(responseText(resp.tagged))
         }
-        _ = text
     }
 
     func logout() async throws {
@@ -208,14 +235,30 @@ actor IMAPClient {
 
     private func rawReceive() async throws -> Data {
         guard let conn = connection else { throw IMAPError.serverDisconnected }
-        return try await withCheckedThrowingContinuation { cont in
-            conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
-                if let e = error { cont.resume(throwing: e); return }
-                if isComplete && (data == nil || data!.isEmpty) {
-                    cont.resume(throwing: IMAPError.serverDisconnected); return
+        // Race the receive against a watchdog. NWConnection.receive has no native
+        // timeout — without this, a stalled server hangs the backup forever and the
+        // Stop button has no effect. On timeout the connection is cancelled, which
+        // also unblocks the pending receive callback.
+        return try await withThrowingTaskGroup(of: Data.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, Error>) in
+                    conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+                        if let e = error { cont.resume(throwing: e); return }
+                        if isComplete && (data == nil || data!.isEmpty) {
+                            cont.resume(throwing: IMAPError.serverDisconnected); return
+                        }
+                        cont.resume(returning: data ?? Data())
+                    }
                 }
-                cont.resume(returning: data ?? Data())
             }
+            group.addTask { [timeoutSeconds] in
+                try await Task.sleep(for: .seconds(timeoutSeconds))
+                conn.cancel()
+                throw IMAPError.timeout
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else { throw IMAPError.timeout }
+            return first
         }
     }
 

@@ -34,6 +34,8 @@ struct MboxStore {
 
     /// Appends a message to an mbox file.
     /// Returns (offset, length): byte position of the "From " line start and total bytes written.
+    /// The message body is processed at byte level — never decoded to String — so non-UTF-8
+    /// content (Latin-1, Windows-1252, raw 8-bit) is preserved exactly as received.
     @discardableResult
     static func appendMessage(
         messageData: Data,
@@ -49,21 +51,15 @@ struct MboxStore {
         let fromLine = "From \(sender) \(imapdateToCtime(internalDate))\n"
         var output = Data()
         output.append(contentsOf: fromLine.utf8)
-
-        let normalizedStr = String(data: messageData, encoding: .utf8)
-            ?? String(data: messageData, encoding: .isoLatin1)
-            ?? ""
-        let normalized = normalizedStr.replacingOccurrences(of: "\r\n", with: "\n")
-        for line in normalized.components(separatedBy: "\n") {
-            output.append(contentsOf: (escapeMboxLine(line) + "\n").utf8)
-        }
-        output.append(contentsOf: "\n".utf8)
+        output.append(escapeMboxData(normalizeToLF(messageData)))
+        if output.last != UInt8(ascii: "\n") { output.append(UInt8(ascii: "\n")) }
+        output.append(UInt8(ascii: "\n"))
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
             let handle = try FileHandle(forWritingTo: fileURL)
-            let offset = Int64(handle.seekToEndOfFile())
-            handle.write(output)
-            handle.closeFile()
+            defer { try? handle.close() }
+            let offset = Int64(try handle.seekToEnd())
+            try handle.write(contentsOf: output)
             return (offset: offset, length: output.count)
         } else {
             try output.write(to: fileURL, options: .atomic)
@@ -71,11 +67,61 @@ struct MboxStore {
         }
     }
 
+    /// CRLF → LF at byte level (lone \r left untouched).
+    private static func normalizeToLF(_ data: Data) -> Data {
+        let cr = UInt8(ascii: "\r"), lf = UInt8(ascii: "\n")
+        guard data.contains(cr) else { return data }
+        var out = Data()
+        out.reserveCapacity(data.count)
+        var i = data.startIndex
+        while i < data.endIndex {
+            let b = data[i]
+            let next = data.index(after: i)
+            if b == cr, next < data.endIndex, data[next] == lf {
+                out.append(lf)
+                i = data.index(after: next)
+            } else {
+                out.append(b)
+                i = next
+            }
+        }
+        return out
+    }
+
+    /// mboxo escaping at byte level: prepend ">" to any line matching />*From / .
+    private static func escapeMboxData(_ data: Data) -> Data {
+        let fromBytes = Array("From ".utf8)
+        let gt = UInt8(ascii: ">"), nl = UInt8(ascii: "\n")
+        var out = Data()
+        out.reserveCapacity(data.count + 64)
+        var i = data.startIndex
+        while i < data.endIndex {
+            // Inspect line start: skip leading '>' then test for "From "
+            var j = i
+            while j < data.endIndex && data[j] == gt { j = data.index(after: j) }
+            var isFrom = true
+            var k = j
+            for fb in fromBytes {
+                guard k < data.endIndex, data[k] == fb else { isFrom = false; break }
+                k = data.index(after: k)
+            }
+            if isFrom { out.append(gt) }
+            // Copy the line through its newline
+            while i < data.endIndex {
+                let b = data[i]
+                out.append(b)
+                i = data.index(after: i)
+                if b == nl { break }
+            }
+        }
+        return out
+    }
+
     // MARK: - Read (streaming)
 
     static func streamMessages(from fileURL: URL, onMessage: (Data) -> Void) throws {
         let handle = try FileHandle(forReadingFrom: fileURL)
-        defer { handle.closeFile() }
+        defer { try? handle.close() }
 
         let delimiter = Data("\nFrom ".utf8)
         let chunkSize = 4 * 1024 * 1024
@@ -83,7 +129,7 @@ struct MboxStore {
         var isFirst = true
 
         while true {
-            let chunk = handle.readData(ofLength: chunkSize)
+            let chunk = try handle.read(upToCount: chunkSize) ?? Data()
             buffer.append(chunk)
 
             var searchStart = buffer.startIndex
@@ -133,12 +179,12 @@ struct MboxStore {
     static func readMessagesWithInternalDate(from fileURL: URL) throws -> [(data: Data, internalDate: String?)] {
         let ranges = try messageRanges(in: fileURL)
         let handle = try FileHandle(forReadingFrom: fileURL)
-        defer { handle.closeFile() }
+        defer { try? handle.close() }
 
         var result: [(Data, String?)] = []
         for (offset, length) in ranges {
-            handle.seek(toFileOffset: UInt64(offset))
-            let raw = handle.readData(ofLength: length)
+            try handle.seek(toOffset: UInt64(offset))
+            let raw = try handle.read(upToCount: length) ?? Data()
             let block = raw.withUnsafeBytes { src in
                 src.count > 0 ? Data(bytes: src.baseAddress!, count: src.count) : Data()
             }
@@ -188,7 +234,7 @@ struct MboxStore {
     /// length = byte length of the block (up to the \n before the next "From ").
     static func messageRanges(in fileURL: URL) throws -> [(offset: Int64, length: Int)] {
         let handle = try FileHandle(forReadingFrom: fileURL)
-        defer { handle.closeFile() }
+        defer { try? handle.close() }
 
         let delimiter = Data("\nFrom ".utf8)  // \n + "From "
         let chunkSize = 512 * 1024
@@ -198,7 +244,7 @@ struct MboxStore {
         var results: [(Int64, Int)] = []
 
         while true {
-            let chunk = handle.readData(ofLength: chunkSize)
+            let chunk = try handle.read(upToCount: chunkSize) ?? Data()
             buffer.append(chunk)
 
             var searchFrom = max(0, Int(msgStart - bufferBase))
@@ -244,11 +290,11 @@ struct MboxStore {
     static func readMessage(at offset: Int64, length: Int, from fileURL: URL) throws -> Data {
         guard offset >= 0, length > 0 else { return Data() }
         let handle = try FileHandle(forReadingFrom: fileURL)
-        defer { handle.closeFile() }
-        handle.seek(toFileOffset: UInt64(offset))
-        // readData returns NSData bridged to Data; force a genuine heap copy to ensure
+        defer { try? handle.close() }
+        try handle.seek(toOffset: UInt64(offset))
+        // read returns NSData bridged to Data; force a genuine heap copy to ensure
         // we never hold an NSSubrangeData that causes rangeOfData overflow.
-        let raw = handle.readData(ofLength: length)
+        let raw = try handle.read(upToCount: length) ?? Data()
         let block = raw.withUnsafeBytes { src in
             src.count > 0 ? Data(bytes: src.baseAddress!, count: src.count) : Data()
         }
@@ -341,12 +387,4 @@ struct MboxStore {
         return result
     }
 
-    private static func escapeMboxLine(_ line: String) -> String {
-        if line.hasPrefix("From ") { return ">" + line }
-        var idx = line.startIndex
-        var gtCount = 0
-        while idx < line.endIndex && line[idx] == ">" { gtCount += 1; idx = line.index(after: idx) }
-        if gtCount > 0 && line[idx...].hasPrefix("From ") { return ">" + line }
-        return line
-    }
 }

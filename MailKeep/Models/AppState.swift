@@ -41,6 +41,9 @@ final class AppState: ObservableObject {
 
 
     func save() {
+        #if DEBUG
+        if DemoSeeder.isActive { return }   // demo runs are ephemeral
+        #endif
         if let data = try? JSONEncoder().encode(accounts) {
             UserDefaults.standard.set(data, forKey: accountsKey)
         }
@@ -51,6 +54,9 @@ final class AppState: ObservableObject {
     }
 
     func load() {
+        #if DEBUG
+        if DemoSeeder.isActive { return }   // DemoSeeder will populate state
+        #endif
         if let data = UserDefaults.standard.data(forKey: accountsKey),
            let decoded = try? JSONDecoder().decode([IMAPAccount].self, from: data) {
             accounts = decoded
