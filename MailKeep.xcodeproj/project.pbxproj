@@ -389,7 +389,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = MailKeep/MailKeep.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				INFOPLIST_FILE = MailKeep/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MailKeep;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -399,7 +399,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mailkeep.MailKeep;
 				PRODUCT_NAME = MailKeep;
 				SDKROOT = macosx;
@@ -413,7 +413,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = MailKeep/MailKeep.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				INFOPLIST_FILE = MailKeep/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MailKeep;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -423,7 +423,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mailkeep.MailKeep;
 				PRODUCT_NAME = MailKeep;
 				SDKROOT = macosx;
