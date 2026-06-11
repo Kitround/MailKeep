@@ -6,6 +6,8 @@ struct EmailDetailView: View {
     @EnvironmentObject var backupEngine: BackupEngine
     let email: EmailMessage
     @State private var showRestoreSheet = false
+    @State private var allowRemoteContent = false
+    @State private var exportError: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,6 +20,15 @@ struct EmailDetailView: View {
             bodySection
         }
         .navigationTitle(email.subject)
+        .onChange(of: email.id) { _, _ in allowRemoteContent = false }
+        .alert("Échec de l'export", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
+        }
         .toolbar {
             ToolbarItem {
                 Button {
@@ -67,7 +78,11 @@ struct EmailDetailView: View {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.init(filenameExtension: "eml") ?? .data]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? emlData.write(to: url)
+        do {
+            try emlData.write(to: url)
+        } catch {
+            exportError = error.localizedDescription
+        }
     }
 
     // MARK: - Header
@@ -137,7 +152,25 @@ struct EmailDetailView: View {
     private var bodySection: some View {
         Group {
             if let html = email.bodyHTML, !html.isEmpty {
-                WebView(html: html)
+                VStack(spacing: 0) {
+                    if !allowRemoteContent {
+                        HStack(spacing: 8) {
+                            Image(systemName: "photo.badge.exclamationmark")
+                                .foregroundStyle(.secondary)
+                            Text("Images distantes bloquées pour protéger votre vie privée.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Charger") { allowRemoteContent = true }
+                                .controlSize(.small)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(.quaternary.opacity(0.5))
+                        Divider()
+                    }
+                    WebView(html: html, allowRemoteContent: allowRemoteContent)
+                }
             } else if let text = email.bodyText, !text.isEmpty {
                 ScrollView {
                     Text(text)
@@ -163,6 +196,7 @@ struct EmailDetailView: View {
 struct AttachmentChip: View {
     let attachment: EmailAttachment
     @State private var isHovered = false
+    @State private var saveError: String? = nil
 
     var body: some View {
         HStack(spacing: 6) {
@@ -201,6 +235,14 @@ struct AttachmentChip: View {
         )
         .onHover { isHovered = $0 }
         .onTapGesture { saveAttachment(attachment) }
+        .alert("Échec de l'enregistrement", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
+        }
     }
 
     private func saveAttachment(_ att: EmailAttachment) {
@@ -208,6 +250,10 @@ struct AttachmentChip: View {
         panel.nameFieldStringValue = att.filename
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? att.data.write(to: url)
+        do {
+            try att.data.write(to: url)
+        } catch {
+            saveError = error.localizedDescription
+        }
     }
 }

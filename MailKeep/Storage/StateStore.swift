@@ -3,7 +3,6 @@ import Foundation
 struct FolderState: Codable {
     var uidValidity: UInt32
     var backedUpUIDs: Set<UInt32>
-    var lastUidNext: UInt32?   // uidNext connu après le dernier backup
 }
 
 struct StateStore {
@@ -35,10 +34,9 @@ struct StateStore {
         try data.write(to: url, options: .atomic)
     }
 
-    func addUIDs(_ uids: Set<UInt32>, accountID: UUID, folderName: String, uidValidity: UInt32, uidNext: UInt32? = nil) throws {
+    func addUIDs(_ uids: Set<UInt32>, accountID: UUID, folderName: String, uidValidity: UInt32) throws {
         var state = load(accountID: accountID, folderName: folderName) ?? FolderState(uidValidity: uidValidity, backedUpUIDs: [])
         state.backedUpUIDs.formUnion(uids)
-        if let next = uidNext { state.lastUidNext = next }
         try save(state, accountID: accountID, folderName: folderName)
     }
 

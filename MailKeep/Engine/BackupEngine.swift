@@ -16,42 +16,50 @@ final class BackupEngine: ObservableObject {
     /// Lance tous les comptes activés en parallèle (un Task par dossier).
     func backupAll() async {
         guard let state = appState else { return }
-        await withTaskGroup(of: Void.self) { group in
+        var succeededAccounts: Set<UUID> = []
+        await withTaskGroup(of: (UUID, Bool).self) { group in
             for account in state.accounts where account.isEnabled {
                 for folder in account.folders where folder.isEnabled {
                     group.addTask { @MainActor in
-                        await self.backupFolder(account: account, folder: folder)
+                        (account.id, await self.backupFolder(account: account, folder: folder))
                     }
                 }
             }
-        }
-        // Mise à jour lastBackupDate pour chaque compte
-        guard let state = appState else { return }
-        for account in state.accounts where account.isEnabled {
-            if var updated = state.accounts.first(where: { $0.id == account.id }) {
-                updated.schedule.lastBackupDate = Date()
-                state.updateAccount(updated)
+            for await (accountID, ok) in group where ok {
+                succeededAccounts.insert(accountID)
             }
+        }
+        // lastBackupDate uniquement si au moins un dossier a réussi — un backup
+        // planifié qui échoue (serveur down, mot de passe) sera retenté au prochain tick.
+        guard let state = appState else { return }
+        for account in state.accounts where succeededAccounts.contains(account.id) {
+            var updated = account
+            updated.schedule.lastBackupDate = Date()
+            state.updateAccount(updated)
         }
     }
 
     /// Lance tous les dossiers d'un compte en parallèle.
     func backupAccount(_ account: IMAPAccount) async {
-        await withTaskGroup(of: Void.self) { group in
+        var anySuccess = false
+        await withTaskGroup(of: Bool.self) { group in
             for folder in account.folders where folder.isEnabled {
                 group.addTask { @MainActor in
                     await self.backupFolder(account: account, folder: folder)
                 }
             }
+            for await ok in group where ok { anySuccess = true }
         }
-        if var updated = appState?.accounts.first(where: { $0.id == account.id }) {
+        if anySuccess, var updated = appState?.accounts.first(where: { $0.id == account.id }) {
             updated.schedule.lastBackupDate = Date()
             appState?.updateAccount(updated)
         }
     }
 
-    func backupFolder(account: IMAPAccount, folder: MailFolder) async {
-        guard let state = appState, let baseURL = state.backupBaseURL else { return }
+    /// Returns true if the run completed (including a clean user stop), false on error.
+    @discardableResult
+    func backupFolder(account: IMAPAccount, folder: MailFolder) async -> Bool {
+        guard let state = appState, let baseURL = state.backupBaseURL else { return false }
 
         var progress = BackupProgress(
             accountID: account.id,
@@ -68,6 +76,7 @@ final class BackupEngine: ObservableObject {
             startedAt: Date()
         )
         state.addRun(run)
+        var succeeded = false
 
         do {
             let password = try keychain.load(for: account)
@@ -122,7 +131,10 @@ final class BackupEngine: ObservableObject {
             var bytesWritten: Int64 = 0
             let idxURL = MboxStore.indexURL(baseDir: baseURL, account: account, folderName: folder.name)
             let indexStore = EmailIndexStore(indexURL: idxURL)
-            var indexBatch: [EmailIndexEntry] = []
+            // Index gardé en mémoire pendant tout le run — l'ancien append() relisait
+            // et réécrivait le JSON complet à chaque flush (O(n²) sur les gros dossiers).
+            var indexEntries = toFetch.isEmpty ? [] : indexStore.load()
+            var newEntriesSinceFlush = 0
 
             let key = stopKey(account.id, folder.name)
             var wasStopped = false
@@ -156,7 +168,7 @@ final class BackupEngine: ObservableObject {
                 downloadedUIDs.insert(uid)
 
                 let headerMsg = EmailParser.parseHeadersOnly(data: msg.rfc822)
-                indexBatch.append(EmailIndexEntry(
+                indexEntries.append(EmailIndexEntry(
                     id: headerMsg.id,
                     from: headerMsg.from, to: headerMsg.to, cc: headerMsg.cc,
                     subject: headerMsg.subject, date: headerMsg.date,
@@ -164,6 +176,7 @@ final class BackupEngine: ObservableObject {
                     offset: fileOffset, length: fileLength,
                     hasAttachments: headerMsg.hasAttachments
                 ))
+                newEntriesSinceFlush += 1
 
                 if downloadedUIDs.count % 50 == 0 {
                     try stateStore.addUIDs(
@@ -173,20 +186,22 @@ final class BackupEngine: ObservableObject {
                         uidValidity: folderStatus.uidValidity
                     )
                     downloadedUIDs = []
-                    try indexStore.append(indexBatch)
-                    indexBatch = []
+                }
+                if newEntriesSinceFlush >= 250 {
+                    try indexStore.save(indexEntries)
+                    newEntriesSinceFlush = 0
                 }
             }
 
-            // Flush restant — uidNext plus jamais persisté (il cassait la détection
-            // des messages passés de non-lus à lus depuis le dernier backup)
-            try indexStore.append(indexBatch)
+            // Flush restant
+            if newEntriesSinceFlush > 0 {
+                try indexStore.save(indexEntries)
+            }
             try stateStore.addUIDs(
                 downloadedUIDs,
                 accountID: account.id,
                 folderName: folder.name,
-                uidValidity: folderStatus.uidValidity,
-                uidNext: nil
+                uidValidity: folderStatus.uidValidity
             )
 
             try? await client.logout()
@@ -209,6 +224,7 @@ final class BackupEngine: ObservableObject {
                 run.bytesWritten = bytesWritten
                 state.updateRun(run)
             }
+            succeeded = true
 
         } catch {
             progress.phase = .failed
@@ -221,6 +237,7 @@ final class BackupEngine: ObservableObject {
 
         try? await Task.sleep(for: .seconds(2))
         state.activeProgress.removeValue(forKey: progressID)
+        return succeeded
     }
 
     // MARK: - Stop
@@ -360,14 +377,28 @@ final class BackupEngine: ObservableObject {
             try await client.login(username: account.username, password: password)
 
             progress.phase = .downloadingMessages
+            // Un message refusé par le serveur ne doit pas interrompre tout le restore.
+            // En revanche, des échecs consécutifs (connexion morte) font abandonner.
+            var failedCount = 0
+            var consecutiveFailures = 0
             for (i, item) in messages.enumerated() {
                 progress.current = i + 1
                 state.activeProgress[progressID] = progress
-                try await client.appendMessage(to: folder.name, data: item.data, internalDate: item.internalDate)
+                do {
+                    try await client.appendMessage(to: folder.name, data: item.data, internalDate: item.internalDate)
+                    consecutiveFailures = 0
+                } catch {
+                    failedCount += 1
+                    consecutiveFailures += 1
+                    if consecutiveFailures >= 5 { throw error }
+                }
             }
 
             try await client.logout()
             progress.phase = .done
+            if failedCount > 0 {
+                progress.errorMessage = "\(failedCount) message(s) refusé(s) par le serveur."
+            }
             state.activeProgress[progressID] = progress
 
         } catch {

@@ -46,13 +46,6 @@ struct EmailIndexStore {
         try JSONEncoder().encode(entries).write(to: url, options: .atomic)
     }
 
-    func append(_ newEntries: [EmailIndexEntry]) throws {
-        guard !newEntries.isEmpty else { return }
-        var all = load()
-        all.append(contentsOf: newEntries)
-        try save(all)
-    }
-
     func wipe() {
         try? FileManager.default.removeItem(at: url)
     }

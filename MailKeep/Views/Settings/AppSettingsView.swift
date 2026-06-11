@@ -50,7 +50,7 @@ struct AppSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Les fichiers .mbox sont organisés par compte et dossier, puis par année (ex. INBOX_2024.mbox).")
+                Text("Les fichiers .mbox sont organisés par compte et dossier, puis par année et mois (ex. INBOX_2024-03.mbox).")
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
@@ -77,6 +77,7 @@ struct AppSettingsView: View {
                         showResetAllConfirm = true
                     }
                     .foregroundStyle(.red)
+                    .disabled(appState.isRunningBackup)
                 }
             } footer: {
                 Text("Le cache mémorise les UIDs déjà téléchargés. Le réinitialiser force un re-téléchargement complet au prochain backup.")
@@ -100,6 +101,7 @@ struct AppSettingsView: View {
                                 accountToReset = account
                             }
                             .foregroundStyle(.orange)
+                            .disabled(appState.isRunningBackup)
                         }
                     }
                 }
