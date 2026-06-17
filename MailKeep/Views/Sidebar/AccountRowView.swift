@@ -9,30 +9,47 @@ struct AccountRowView: View {
 
     @State private var isHovered = false
 
+    private var isBacking: Bool {
+        appState.activeProgress.values.contains { $0.accountID == account.id }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .frame(width: 16)
-                Text(account.label.isEmpty ? account.host : account.label)
-                    .font(.headline)
-                Spacer()
-                if !isExpanded && appState.activeProgress.values.contains(where: { $0.accountID == account.id }) {
-                    ProgressView().controlSize(.small)
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(width: 16)
+                    Text(account.label.isEmpty ? account.host : account.label)
+                        .font(.headline)
+                    Spacer()
                 }
+                Text(account.username)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 22)
+                scheduleIndicator
+                    .padding(.leading, 22)
             }
-            Text(account.username)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.leading, 22)
-            scheduleIndicator
-                .padding(.leading, 22)
+            .contentShape(Rectangle())
+            .onTapGesture { isExpanded.toggle() }
+
+            // Per-account settings — vertically centered against the name + email lines.
+            if !isExpanded && isBacking {
+                ProgressView().controlSize(.small)
+            }
+            Button(action: onEdit) {
+                Image(systemName: "gearshape")
+                    .font(.body)
+                    .foregroundStyle(isHovered ? .primary : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Réglages du compte")
+            .opacity(isHovered ? 1 : 0.5)
+            .padding(.trailing, 8)
         }
-        .contentShape(Rectangle())
-        .onTapGesture { isExpanded.toggle() }
         .listRowInsets(EdgeInsets(top: 20, leading: -3, bottom: 6, trailing: 0))
         .listRowBackground(
             VStack(spacing: 0) {
