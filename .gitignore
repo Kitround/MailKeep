@@ -6,6 +6,10 @@ Mails/
 *.mbox
 *_index.json
 
+# Internal notes — keep local, never publish
+CLAUDE.md
+claude.md
+
 # Xcode user-specific state
 xcuserdata/
 *.xcuserstate

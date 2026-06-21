@@ -113,8 +113,6 @@ MailKeep/
 └── Views/         SwiftUI views (sidebar, list, detail, settings…)
 ```
 
-See [`CLAUDE.md`](CLAUDE.md) for the full architectural notes.
-
 ---
 
 ## License
