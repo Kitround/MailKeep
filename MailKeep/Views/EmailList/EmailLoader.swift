@@ -178,10 +178,10 @@ final class EmailLoader: ObservableObject {
 
             for (offset, length) in ranges.reversed() {
                 if Task.isCancelled { break }
-                handle.seek(toFileOffset: UInt64(offset))
+                guard (try? handle.seek(toOffset: UInt64(offset))) != nil else { continue }
                 // Force a genuine heap copy — FileHandle returns NSData-backed Data whose
                 // non-zero internal offset causes rangeOfData:options:range: to overflow.
-                let raw = handle.readData(ofLength: min(length, 32_768))
+                let raw = ((try? handle.read(upToCount: min(length, 32_768))).flatMap { $0 }) ?? Data()
                 let block = raw.withUnsafeBytes { src in
                     src.count > 0 ? Data(bytes: src.baseAddress!, count: src.count) : Data()
                 }
@@ -195,7 +195,7 @@ final class EmailLoader: ObservableObject {
                     hasAttachments: msg.hasAttachments
                 ))
             }
-            handle.closeFile()
+            try? handle.close()
 
             allEntries.append(contentsOf: fileEntries)
 

@@ -423,14 +423,23 @@ enum EmailParser {
 
     // MARK: - Date parsing
 
+    // One immutable formatter per format — DateFormatter is costly to allocate, and
+    // parse() runs off the main thread on many messages. Created once and never
+    // mutated, so concurrent `date(from:)` reads are safe.
+    private static let dateFormatters: [DateFormatter] = [
+        "EEE, dd MMM yyyy HH:mm:ss Z",
+        "dd MMM yyyy HH:mm:ss Z",
+        "EEE, dd MMM yyyy HH:mm:ss z",
+        "EEE, d MMM yyyy HH:mm:ss Z",
+        "dd MMM yyyy HH:mm Z",
+    ].map { fmt -> DateFormatter in
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = fmt
+        return f
+    }
+
     private static func parseDate(_ value: String) -> Date? {
-        let formats = [
-            "EEE, dd MMM yyyy HH:mm:ss Z",
-            "dd MMM yyyy HH:mm:ss Z",
-            "EEE, dd MMM yyyy HH:mm:ss z",
-            "EEE, d MMM yyyy HH:mm:ss Z",
-            "dd MMM yyyy HH:mm Z",
-        ]
         let cleaned = value.trimmingCharacters(in: .whitespaces)
         // Strip trailing comment like "(UTC)"
         let noComment: String
@@ -439,10 +448,7 @@ enum EmailParser {
         } else {
             noComment = cleaned
         }
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        for fmt in formats {
-            df.dateFormat = fmt
+        for df in dateFormatters {
             if let d = df.date(from: noComment) { return d }
         }
         return nil

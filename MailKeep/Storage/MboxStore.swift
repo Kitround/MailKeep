@@ -2,6 +2,21 @@ import Foundation
 
 struct MboxStore {
 
+    // Cached formatters — DateFormatter is costly to allocate and these run once per
+    // backed-up message. Created once, never mutated → safe to read concurrently.
+    private static let posix = Locale(identifier: "en_US_POSIX")
+    private static func makeFormatter(_ format: String, utc: Bool = false) -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = posix
+        if utc { f.timeZone = TimeZone(identifier: "UTC") }
+        f.dateFormat = format
+        return f
+    }
+    private static let imapInFormatter   = makeFormatter("d-MMM-yyyy HH:mm:ss Z")
+    private static let ctimeOutFormatter = makeFormatter("EEE MMM dd HH:mm:ss yyyy")
+    private static let ctimeInFormatter  = makeFormatter("EEE MMM dd HH:mm:ss yyyy", utc: true)
+    private static let imapOutFormatter  = makeFormatter("dd-MMM-yyyy HH:mm:ss Z", utc: true)
+
     // MARK: - URLs
 
     static func mboxURL(baseDir: URL, account: IMAPAccount, folderName: String, year: Int, month: Int) -> URL {
@@ -223,21 +238,13 @@ struct MboxStore {
         guard let firstSpace = rest.firstIndex(of: " ") else { return nil }
         let ctime = String(rest[rest.index(after: firstSpace)...]).trimmingCharacters(in: .whitespaces)
 
-        let parser = DateFormatter()
-        parser.locale = Locale(identifier: "en_US_POSIX")
-        parser.timeZone = TimeZone(identifier: "UTC")
-        parser.dateFormat = "EEE MMM dd HH:mm:ss yyyy"
-        guard let date = parser.date(from: ctime) else { return nil }
+        guard let date = ctimeInFormatter.date(from: ctime) else { return nil }
         return imapDate(from: date)
     }
 
     /// Date → "02-Jan-2006 15:04:05 +0000" (IMAP RFC 3501 INTERNALDATE format)
     static func imapDate(from date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "UTC")
-        f.dateFormat = "dd-MMM-yyyy HH:mm:ss Z"
-        return f.string(from: date)
+        imapOutFormatter.string(from: date)
     }
 
     // MARK: - Random access (for index-based loading)
@@ -340,20 +347,9 @@ struct MboxStore {
     }
 
     static func imapdateToCtime(_ imap: String) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "d-MMM-yyyy HH:mm:ss Z"
         let cleaned = imap.trimmingCharacters(in: .whitespaces)
-        if let date = formatter.date(from: cleaned) {
-            let ctime = DateFormatter()
-            ctime.locale = Locale(identifier: "en_US_POSIX")
-            ctime.dateFormat = "EEE MMM dd HH:mm:ss yyyy"
-            return ctime.string(from: date)
-        }
-        let fallback = DateFormatter()
-        fallback.locale = Locale(identifier: "en_US_POSIX")
-        fallback.dateFormat = "EEE MMM dd HH:mm:ss yyyy"
-        return fallback.string(from: Date())
+        let date = imapInFormatter.date(from: cleaned) ?? Date()
+        return ctimeOutFormatter.string(from: date)
     }
 
     static func accountDirName(_ account: IMAPAccount) -> String {

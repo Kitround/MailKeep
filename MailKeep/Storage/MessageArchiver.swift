@@ -81,63 +81,95 @@ enum MessageArchiver {
         let ns = html as NSString
         let matches = regex.matches(in: html, range: NSRange(location: 0, length: ns.length))
 
-        var result = html
-        var fetched: [(String, String, Data)] = []
-        var count = 0
-        var totalBytes = 0
-
-        // Reverse so earlier ranges stay valid while we splice replacements in.
-        for match in matches.reversed() {
+        // Collect remote candidates in document order, capped.
+        var candidates: [(range: NSRange, src: String)] = []
+        for match in matches {
             guard match.numberOfRanges == 2 else { continue }
             let src = ns.substring(with: match.range(at: 1))
             let lower = src.lowercased()
             guard lower.hasPrefix("http://") || lower.hasPrefix("https://") else { continue }
-            guard count < maxImages else { continue }
+            candidates.append((match.range(at: 1), src))
+            if candidates.count >= maxImages { break }
+        }
+        guard !candidates.isEmpty else { return (html, []) }
 
-            guard let (data, mime) = await fetch(src), data.count <= maxBytesPerImage,
-                  totalBytes + data.count <= maxTotalBytes else { continue }
-            totalBytes += data.count
-            let cid = "mkimg\(count)@mailkeep"
-            fetched.append((cid, mime, data))
-            count += 1
-
-            if let range = Range(match.range(at: 1), in: result) {
-                result.replaceSubrange(range, with: "cid:\(cid)")
+        // Fetch them in parallel — previously serial, which stacked timeouts.
+        // fetch returns (data, mime).
+        var byIndex: [Int: (data: Data, mime: String)] = [:]
+        await withTaskGroup(of: (Int, (Data, String)?).self) { group in
+            for (i, c) in candidates.enumerated() {
+                group.addTask { (i, await fetch(c.src)) }
             }
+            for await (i, res) in group {
+                if let res { byIndex[i] = (res.0, res.1) }
+            }
+        }
+
+        // Assign Content-IDs in document order, enforce the total cap, then splice
+        // replacements back-to-front so earlier NSRanges stay valid.
+        var fetched: [(String, String, Data)] = []
+        var splices: [(NSRange, String)] = []
+        var totalBytes = 0
+        for (i, c) in candidates.enumerated() {
+            guard let img = byIndex[i] else { continue }
+            guard img.data.count <= maxBytesPerImage, totalBytes + img.data.count <= maxTotalBytes else { continue }
+            totalBytes += img.data.count
+            let cid = "mkimg\(fetched.count)@mailkeep"
+            fetched.append((cid, img.mime, img.data))
+            splices.append((c.range, "cid:\(cid)"))
+        }
+
+        var result = html
+        for (range, replacement) in splices.sorted(by: { $0.0.location > $1.0.location }) {
+            if let r = Range(range, in: result) { result.replaceSubrange(r, with: replacement) }
         }
         return (result, fetched)
     }
 
     private static func fetch(_ urlString: String) async -> (Data, String)? {
         guard let url = URL(string: urlString), let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else { return nil }
+              scheme == "http" || scheme == "https",
+              let host = url.host, !isBlockedHost(host) else { return nil }
 
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = fetchTimeout
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        let session = URLSession(configuration: config)
+        var req = URLRequest(url: url)
+        // Browser-ish headers — many CDNs 404 plain requests (e.g. S3 NoSuchKey).
+        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
+                     forHTTPHeaderField: "User-Agent")
+        req.setValue("image/avif,image/webp,image/png,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
 
-        do {
-            var req = URLRequest(url: url)
-            // Browser-ish headers — many CDNs 404 plain requests (e.g. S3 NoSuchKey).
-            req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
-                         forHTTPHeaderField: "User-Agent")
-            req.setValue("image/avif,image/webp,image/png,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        // ImageFetcher enforces 2xx, caps the body size during download, and blocks
+        // redirects to private/loopback hosts (SSRF defense).
+        guard let data = await ImageFetcher(maxBytes: maxBytesPerImage, timeout: fetchTimeout).run(req),
+              !data.isEmpty, let sniffed = sniffImageMime(data) else { return nil }
+        return (data, sniffed)
+    }
 
-            let (data, response) = try await session.data(for: req)
-            // Must be a 2xx response AND actually an image — otherwise an error page
-            // (S3 XML, 404 HTML…) would get embedded as a broken "image".
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                return nil
-            }
-            guard !data.isEmpty else { return nil }
-            if let sniffed = sniffImageMime(data) { return (data, sniffed) }
-            let mime = (response.mimeType ?? "").lowercased()
-            if mime == "image/svg+xml" { return (data, "image/svg+xml") }
-            return nil   // not a recognisable image → leave the original URL in place
-        } catch {
-            return nil
+    /// Blocks loopback, link-local, private and CGNAT address literals plus obvious
+    /// local hostnames — prevents an attacker email from making the app probe the LAN
+    /// or localhost services via `<img src>`. (Domain → private-IP rebinding is not
+    /// fully covered without resolving; the redirect check narrows that window.)
+    static func isBlockedHost(_ host: String) -> Bool {
+        var h = host.lowercased()
+        if h.hasPrefix("[") { h.removeFirst() }      // strip IPv6 brackets
+        if h.hasSuffix("]") { h.removeLast() }
+        if h == "localhost" || h.hasSuffix(".local") || h.hasSuffix(".internal") || h.hasSuffix(".localhost") {
+            return true
         }
+        // IPv6 loopback / link-local / unique-local
+        if h == "::1" || h.hasPrefix("fe80:") || h.hasPrefix("fc") || h.hasPrefix("fd") || h.hasPrefix("::ffff:") {
+            return true
+        }
+        // IPv4 literal
+        let octets = h.split(separator: ".", omittingEmptySubsequences: false).compactMap { UInt16($0) }
+        if octets.count == 4, octets.allSatisfy({ $0 <= 255 }) {
+            let a = octets[0], b = octets[1]
+            if a == 0 || a == 10 || a == 127 { return true }
+            if a == 169 && b == 254 { return true }            // link-local + cloud metadata
+            if a == 172 && (16...31).contains(b) { return true }
+            if a == 192 && b == 168 { return true }
+            if a == 100 && (64...127).contains(b) { return true } // CGNAT
+        }
+        return false
     }
 
     /// Identifies an image strictly from its leading magic bytes.
@@ -285,5 +317,75 @@ enum MessageArchiver {
         s.replacingOccurrences(of: "&", with: "&amp;")
          .replacingOccurrences(of: "<", with: "&lt;")
          .replacingOccurrences(of: ">", with: "&gt;")
+    }
+}
+
+/// One-shot image download with hard limits: 2xx only, body size capped *during*
+/// streaming (a hostile URL can't buffer gigabytes), and redirects to private/loopback
+/// hosts refused (SSRF defense). One instance per request.
+private final class ImageFetcher: NSObject, URLSessionDataDelegate {
+    private let maxBytes: Int
+    private let timeout: TimeInterval
+    private var buffer = Data()
+    private var headerOK = false
+    private var continuation: CheckedContinuation<Data?, Never>?
+    private var settled = false
+
+    init(maxBytes: Int, timeout: TimeInterval) {
+        self.maxBytes = maxBytes
+        self.timeout = timeout
+    }
+
+    func run(_ request: URLRequest) async -> Data? {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = timeout
+        config.timeoutIntervalForResource = timeout * 2
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.httpShouldSetCookies = false
+        let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        return await withCheckedContinuation { (cont: CheckedContinuation<Data?, Never>) in
+            continuation = cont
+            session.dataTask(with: request).resume()
+        }
+    }
+
+    private func settle(_ result: Data?) {
+        guard !settled, let cont = continuation else { return }
+        settled = true
+        continuation = nil
+        cont.resume(returning: result)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,
+                    didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              http.expectedContentLength <= Int64(maxBytes) else {
+            completionHandler(.cancel); settle(nil); return
+        }
+        headerOK = true
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        buffer.append(data)
+        if buffer.count > maxBytes { dataTask.cancel(); settle(nil) }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        if let host = request.url?.host, !MessageArchiver.isBlockedHost(host),
+           let scheme = request.url?.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+            completionHandler(request)
+        } else {
+            completionHandler(nil)   // refuse redirect to a private/non-http target
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        settle(error == nil && headerOK ? buffer : nil)
     }
 }

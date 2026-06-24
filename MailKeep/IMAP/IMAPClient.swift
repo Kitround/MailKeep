@@ -11,10 +11,18 @@ actor IMAPClient {
     // MARK: - Connect (IMAPS — TLS direct sur port 993)
 
     func connect(host: String, port: Int = 993) async throws {
+        guard (1...65535).contains(port) else {
+            throw IMAPError.connectionFailed("Port invalide : \(port)")
+        }
+        // Refuse legacy TLS — IMAPS must be TLS 1.2 or newer.
+        let tlsOptions = NWProtocolTLS.Options()
+        sec_protocol_options_set_min_tls_protocol_version(tlsOptions.securityProtocolOptions, .TLSv12)
+        let params = NWParameters(tls: tlsOptions)
+
         let conn = NWConnection(
             host: NWEndpoint.Host(host),
-            port: NWEndpoint.Port(rawValue: UInt16(port))!,
-            using: NWParameters.tls
+            port: NWEndpoint.Port(rawValue: UInt16(port))!,   // safe: range-checked above
+            using: params
         )
         self.connection = conn
 
@@ -286,7 +294,7 @@ actor IMAPClient {
     }
 
     private func receiveBytes(_ count: Int) async throws -> Data {
-        guard count < 500_000_000 else { throw IMAPError.literalTooLarge(count) }
+        guard count >= 0, count < 200_000_000 else { throw IMAPError.literalTooLarge(count) }
         while receiveBuffer.count < count {
             let chunk = try await rawReceive()
             receiveBuffer.append(chunk)
