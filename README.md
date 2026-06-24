@@ -22,8 +22,9 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 - **Direct IMAP backup** over TLS (port 993). Works with Gmail, iCloud, Fastmail, Proton Bridge, self-hosted Dovecot/Cyrus, etc.
 - **Incremental sync** based on `UIDVALIDITY` + per-folder UID tracking. Re-runs only download new messages.
 - **Configurable message filter** per account: All / Read only / Unread only / Flagged.
-- **Open archive format**: Unix `.mbox` files split by year-month, plus a sidecar JSON index for fast browsing.
-- **Built-in viewer**: read backed-up emails directly inside the app (HTML rendering, attachments listed).
+- **Full archive mode** (per account, opt-in): fetches remote hot-linked images and embeds attachments into one self-contained `.html` per message — your mail stays complete even after the sender drops the images.
+- **Open archive format**: Unix `.mbox` files split by year-month, plus a sidecar JSON index for fast browsing. Messages are stored byte-for-byte (non-UTF-8 safe).
+- **Built-in viewer**: read backed-up emails directly inside the app — remote images are **blocked by default** for privacy, with per-message opt-in.
 - **Restore** entire folders or individual messages back to any IMAP server, original `INTERNALDATE` preserved.
 - **Import** existing `.mbox` files from Apple Mail / Thunderbird / other backups.
 - **Scheduled backups** per account (15 min → 7 days).
@@ -36,10 +37,12 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 
 ## Installation
 
-1. Download the latest **`MailKeep.zip`** from the [Releases page](https://github.com/Kitround/MailKeep/releases).
+1. Download **[`MailKeep-1.7.zip`](https://github.com/Kitround/MailKeep/releases/latest)** from the latest release.
 2. Unzip and move `MailKeep.app` into `/Applications`.
-3. First launch: right-click → **Open** to bypass Gatekeeper (the app is not yet notarised).
+3. First launch: right-click → **Open** to bypass Gatekeeper (the app is signed ad-hoc, not notarised).
 4. Pick a backup folder when prompted — this is where `.mbox` files will be written.
+
+Universal binary (Apple Silicon + Intel) · macOS 14 (Sonoma) or later.
 
 ## Quick start
 
@@ -58,6 +61,7 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 |---|---|
 | Mailboxes (`.mbox` files, one per year-month) | The folder you picked at first launch |
 | Search index (JSON, per folder) | Same folder, next to the `.mbox` |
+| Full-archive copies (`.html`, when enabled) | `archive/` subfolder next to the `.mbox` |
 | UID state (per folder) | `~/Library/Containers/com.mailkeep.MailKeep/Data/Library/Application Support/` |
 | IMAP passwords | macOS Keychain (service `com.mailkeep.MailKeep.imap`) |
 
@@ -79,9 +83,17 @@ Restored messages arrive flagged `\Seen` (server-side limitation: original flags
 3. Run `UID SEARCH <filter>` (e.g. `SEEN`) — server returns the full UID list matching the filter.
 4. Subtract the UIDs already on disk → fetch only the new ones.
 5. Each message is appended to the right `.mbox` file (`<folder>_YYYY-MM.mbox`), indexed, and its UID added to local state.
-6. Flushes happen every 50 messages so an interrupted run resumes cleanly.
+6. UID state is flushed every 50 messages and the index every 250, so an interrupted run resumes cleanly.
 
 `UID FETCH` uses `BODY.PEEK[]`, so the `\Seen` flag is never changed on the server.
+
+## Full archive (offline images & attachments)
+
+The `.mbox` always contains the complete message, so **inline images and attachments are already saved**. What is *not* in any email are **remote hot-linked images** (`<img src="https://…">`) — they live on the sender's server and vanish when it drops them.
+
+Enable **Full archive** on an account (Settings → *Archive complète*, off by default) to also write a self-contained `.html` per message: remote images are fetched and inlined as `data:` URIs, attachments embedded, all in one portable file you can open in any browser. The viewer shows it via the **Archived copy** button.
+
+> Tradeoff: fetching remote images makes HTTP requests to sender servers at backup time, revealing your IP — the same thing the viewer's blocker prevents. That's why it's opt-in.
 
 ---
 
