@@ -192,7 +192,10 @@ struct EmailDetailView: View {
                     .background(.quaternary.opacity(0.5))
                     Divider()
                     if let html = archivedHTML {
-                        WebView(html: html, allowRemoteContent: false)
+                        // Embedded images (cid) render offline; any image that couldn't be
+                        // fetched at backup time stays a remote URL — allow it to load here
+                        // since the user opted into the full archive.
+                        WebView(html: html, allowRemoteContent: true)
                     } else {
                         ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                     }

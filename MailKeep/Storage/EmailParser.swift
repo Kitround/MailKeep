@@ -145,9 +145,7 @@ enum EmailParser {
                 .components(separatedBy: .newlines).joined()
             decoded = Data(base64Encoded: text, options: .ignoreUnknownCharacters) ?? data
         case "quoted-printable":
-            let text = String(data: data, encoding: .ascii)
-                ?? String(data: data, encoding: .utf8) ?? ""
-            decoded = decodeQP(text)
+            decoded = decodeQP(data)
         default:
             decoded = data
         }
@@ -323,11 +321,8 @@ enum EmailParser {
             return bytesToString(data, charset: charset)
 
         case "quoted-printable":
-            // QP input is ASCII text — decode =XX sequences to raw bytes, then apply charset
-            let text = String(data: data, encoding: .ascii)
-                ?? String(data: data, encoding: .utf8)
-                ?? ""
-            let decoded = decodeQP(text)
+            // Decode =XX sequences + soft line breaks at byte level, then apply charset.
+            let decoded = decodeQP(data)
             return bytesToString(decoded, charset: charset)
 
         default: // 7bit, 8bit, binary
@@ -350,38 +345,42 @@ enum EmailParser {
     }
 
     /// Decode quoted-printable to raw bytes (NOT to String — charset is applied after).
-    private static func decodeQP(_ input: String) -> Data {
+    /// Operates on bytes, never Swift Characters: "\r\n" is a single grapheme cluster,
+    /// so iterating Characters would miss "=\r\n" soft line breaks and corrupt the output.
+    private static func decodeQP(_ data: Data) -> Data {
+        let bytes = [UInt8](data)
         var out = Data()
-        out.reserveCapacity(input.utf8.count)
-        var i = input.startIndex
+        out.reserveCapacity(bytes.count)
+        let eq = UInt8(ascii: "="), cr = UInt8(ascii: "\r"), lf = UInt8(ascii: "\n")
 
-        while i < input.endIndex {
-            let c = input[i]
-            guard c == "=" else {
-                // Regular ASCII byte
-                out.append(UInt8(c.asciiValue ?? UInt8(c.unicodeScalars.first!.value & 0x7F)))
-                i = input.index(after: i)
-                continue
+        func hexValue(_ b: UInt8) -> UInt8? {
+            switch b {
+            case 0x30...0x39: return b - 0x30          // 0-9
+            case 0x41...0x46: return b - 0x41 + 10      // A-F
+            case 0x61...0x66: return b - 0x61 + 10      // a-f
+            default:          return nil
             }
-            let i1 = input.index(after: i)
-            guard i1 < input.endIndex else { break }
+        }
 
-            let c1 = input[i1]
+        var i = 0
+        while i < bytes.count {
+            let b = bytes[i]
+            guard b == eq else { out.append(b); i += 1; continue }
+            guard i + 1 < bytes.count else { break }
+            let n1 = bytes[i + 1]
             // Soft line break: =\r\n or =\n
-            if c1 == "\r" || c1 == "\n" {
-                i = input.index(after: i1)
-                if c1 == "\r", i < input.endIndex, input[i] == "\n" {
-                    i = input.index(after: i)
-                }
+            if n1 == cr || n1 == lf {
+                i += 2
+                if n1 == cr, i < bytes.count, bytes[i] == lf { i += 1 }
                 continue
             }
-            let i2 = input.index(after: i1)
-            if i2 < input.endIndex, let byte = UInt8(String(input[i1...i2]), radix: 16) {
-                out.append(byte)
-                i = input.index(after: i2)
+            // =XX hex escape
+            if i + 2 < bytes.count, let hi = hexValue(n1), let lo = hexValue(bytes[i + 2]) {
+                out.append(hi << 4 | lo)
+                i += 3
             } else {
-                out.append(UInt8(ascii: "="))
-                i = input.index(after: i)
+                out.append(eq)
+                i += 1
             }
         }
         return out
@@ -409,7 +408,7 @@ enum EmailParser {
                 }
             } else { // Q encoding
                 let qText = encoded.replacingOccurrences(of: "_", with: " ")
-                let data = decodeQP(qText)
+                let data = decodeQP(Data(qText.utf8))
                 decoded = bytesToString(data, charset: charset.lowercased())
             }
 

@@ -119,16 +119,37 @@ enum MessageArchiver {
 
         do {
             var req = URLRequest(url: url)
-            req.setValue("MailKeep", forHTTPHeaderField: "User-Agent")
+            // Browser-ish headers — many CDNs 404 plain requests (e.g. S3 NoSuchKey).
+            req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
+                         forHTTPHeaderField: "User-Agent")
+            req.setValue("image/avif,image/webp,image/png,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
+
             let (data, response) = try await session.data(for: req)
+            // Must be a 2xx response AND actually an image — otherwise an error page
+            // (S3 XML, 404 HTML…) would get embedded as a broken "image".
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                return nil
+            }
             guard !data.isEmpty else { return nil }
-            let mime = (response.mimeType ?? "").hasPrefix("image/")
-                ? response.mimeType!
-                : mimeFromExtension(url.pathExtension)
-            return (data, mime)
+            if let sniffed = sniffImageMime(data) { return (data, sniffed) }
+            let mime = (response.mimeType ?? "").lowercased()
+            if mime == "image/svg+xml" { return (data, "image/svg+xml") }
+            return nil   // not a recognisable image → leave the original URL in place
         } catch {
             return nil
         }
+    }
+
+    /// Identifies an image strictly from its leading magic bytes.
+    private static func sniffImageMime(_ data: Data) -> String? {
+        let b = [UInt8](data.prefix(12))
+        if b.count >= 4, b[0] == 0x89, b[1] == 0x50, b[2] == 0x4E, b[3] == 0x47 { return "image/png" }
+        if b.count >= 3, b[0] == 0xFF, b[1] == 0xD8, b[2] == 0xFF { return "image/jpeg" }
+        if b.count >= 4, b[0] == 0x47, b[1] == 0x49, b[2] == 0x46, b[3] == 0x38 { return "image/gif" }
+        if b.count >= 12, b[0] == 0x52, b[1] == 0x49, b[2] == 0x46, b[3] == 0x46,
+           b[8] == 0x57, b[9] == 0x45, b[10] == 0x42, b[11] == 0x50 { return "image/webp" }
+        if b.count >= 2, b[0] == 0x42, b[1] == 0x4D { return "image/bmp" }
+        return nil
     }
 
     // MARK: - EML assembly
@@ -258,17 +279,6 @@ enum MessageArchiver {
         f.timeZone = TimeZone(identifier: "GMT")
         f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
         return f.string(from: date)
-    }
-
-    private static func mimeFromExtension(_ ext: String) -> String {
-        switch ext.lowercased() {
-        case "png":          return "image/png"
-        case "jpg", "jpeg":  return "image/jpeg"
-        case "gif":          return "image/gif"
-        case "webp":         return "image/webp"
-        case "svg":          return "image/svg+xml"
-        default:             return "image/png"
-        }
     }
 
     private static func escapeHTML(_ s: String) -> String {
