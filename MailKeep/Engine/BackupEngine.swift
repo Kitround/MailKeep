@@ -11,6 +11,15 @@ final class BackupEngine: ObservableObject {
     /// Keys of folders where a stop has been requested (accountID|folderName)
     private var stopRequested: Set<String> = []
 
+    /// A pending .eml archive: re-read the message from the mbox we just wrote
+    /// (tiny footprint) and build the archive off the critical download path.
+    private struct ArchiveJob: Sendable {
+        let mboxURL: URL
+        let offset: Int64
+        let length: Int
+        let archiveURL: URL
+    }
+
     // MARK: - Public API
 
     /// Lance tous les comptes activés en parallèle (un Task par dossier).
@@ -135,6 +144,7 @@ final class BackupEngine: ObservableObject {
             // et réécrivait le JSON complet à chaque flush (O(n²) sur les gros dossiers).
             var indexEntries = toFetch.isEmpty ? [] : indexStore.load()
             var newEntriesSinceFlush = 0
+            var archiveJobs: [ArchiveJob] = []
 
             let key = stopKey(account.id, folder.name)
             var wasStopped = false
@@ -168,11 +178,15 @@ final class BackupEngine: ObservableObject {
                 downloadedUIDs.insert(uid)
 
                 if account.archiveFullContent {
+                    // Don't archive inline — it blocks the download loop on network.
+                    // Queue it; the archive phase below runs it in parallel, off-path.
                     let archiveURL = MboxStore.archiveURL(
                         baseDir: baseURL, account: account,
                         mboxFilename: mboxURL.lastPathComponent, offset: fileOffset
                     )
-                    await MessageArchiver.archive(rfc822: msg.rfc822, to: archiveURL)
+                    archiveJobs.append(ArchiveJob(
+                        mboxURL: mboxURL, offset: fileOffset, length: fileLength, archiveURL: archiveURL
+                    ))
                 }
 
                 let headerMsg = EmailParser.parseHeadersOnly(data: msg.rfc822)
@@ -213,6 +227,41 @@ final class BackupEngine: ObservableObject {
             )
 
             try? await client.logout()
+
+            // Archive phase — decoupled from the download loop so the backup runs at
+            // full speed. Each .eml is built off the main actor, several in parallel,
+            // re-reading the message from the .mbox just written (tiny memory footprint).
+            if !wasStopped, account.archiveFullContent, !archiveJobs.isEmpty {
+                progress.phase = .archiving
+                progress.total = archiveJobs.count
+                progress.current = 0
+                progress.currentUID = nil
+                state.activeProgress[progressID] = progress
+
+                var jobIterator = archiveJobs.makeIterator()
+                var completed = 0
+                let maxConcurrent = 4
+                await withTaskGroup(of: Void.self) { group in
+                    var inFlight = 0
+                    for _ in 0..<maxConcurrent {
+                        guard let job = jobIterator.next() else { break }
+                        group.addTask { await BackupEngine.runArchive(job) }
+                        inFlight += 1
+                    }
+                    while inFlight > 0 {
+                        await group.next()
+                        inFlight -= 1
+                        completed += 1
+                        progress.current = completed
+                        state.activeProgress[progressID] = progress
+                        // Stop respected between launches; in-flight archives finish.
+                        if stopRequested.remove(key) == nil, let job = jobIterator.next() {
+                            group.addTask { await BackupEngine.runArchive(job) }
+                            inFlight += 1
+                        }
+                    }
+                }
+            }
 
             if wasStopped {
                 progress.phase = .stopped
@@ -490,6 +539,14 @@ final class BackupEngine: ObservableObject {
             }
         }
         throw lastError
+    }
+
+    /// Builds one .eml archive off the main actor: re-read the message from the mbox
+    /// (cheap) and hand it to the archiver. Best-effort — failures are silent.
+    nonisolated private static func runArchive(_ job: ArchiveJob) async {
+        guard let data = try? MboxStore.readMessage(at: job.offset, length: job.length, from: job.mboxURL),
+              !data.isEmpty else { return }
+        await MessageArchiver.archive(rfc822: data, to: job.archiveURL)
     }
 
     // MARK: - Delete folder backup

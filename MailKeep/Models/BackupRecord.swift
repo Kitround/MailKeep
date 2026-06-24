@@ -45,6 +45,7 @@ struct BackupProgress: Identifiable {
         case fetchingUIDList = "Récupération des UIDs…"
         case downloadingMessages = "Téléchargement des messages…"
         case writingMbox = "Écriture mbox…"
+        case archiving = "Archivage du contenu…"
         case importing = "Importation en cours…"
         case stopped = "Arrêté"
         case done = "Terminé"

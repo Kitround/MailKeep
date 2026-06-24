@@ -67,8 +67,8 @@ struct ProgressDetailView: View {
                         .monospacedDigit()
                 }
 
-                // Stop button — only on download phases
-                if progress.phase == .downloadingMessages {
+                // Stop button — on download and archive phases
+                if progress.phase == .downloadingMessages || progress.phase == .archiving {
                     Button {
                         backupEngine.requestStop(accountID: progress.accountID, folderName: progress.folderName)
                     } label: {
