@@ -31,12 +31,12 @@ struct MboxStore {
             .appendingPathComponent("archive", isDirectory: true)
     }
 
-    /// Self-contained .html archive path for one message, keyed by its mbox file +
+    /// Self-contained .eml archive path for one message, keyed by its mbox file +
     /// byte offset — deterministic at both backup time and display time.
     static func archiveURL(baseDir: URL, account: IMAPAccount, mboxFilename: String, offset: Int64) -> URL {
         let base = mboxFilename.replacingOccurrences(of: ".mbox", with: "")
         return archiveDir(baseDir: baseDir, account: account)
-            .appendingPathComponent("\(base)_\(offset).html")
+            .appendingPathComponent("\(base)_\(offset).eml")
     }
 
     static func accountDir(baseDir: URL, account: IMAPAccount) -> URL {

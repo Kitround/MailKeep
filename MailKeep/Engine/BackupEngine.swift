@@ -511,10 +511,10 @@ final class BackupEngine: ObservableObject {
             }
         }
 
-        // Self-contained .html archives for this folder (named "<folder>_<period>_<offset>.html")
+        // Self-contained .eml archives for this folder (named "<folder>_<period>_<offset>.eml")
         let archiveDir = MboxStore.archiveDir(baseDir: baseURL, account: account)
         if let contents = try? fm.contentsOfDirectory(at: archiveDir, includingPropertiesForKeys: nil) {
-            for url in contents where url.pathExtension == "html"
+            for url in contents where url.pathExtension == "eml"
                 && url.lastPathComponent.hasPrefix(safeFolder) {
                 try? fm.removeItem(at: url)
             }

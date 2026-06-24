@@ -11,13 +11,13 @@ struct EmailDetailView: View {
     @State private var showArchived = false
     @State private var archivedHTML: String? = nil
 
-    /// Path to the self-contained .html archive for this message, if it exists.
+    /// Path to the self-contained .eml archive for this message, if it exists.
     private var archivedFileURL: URL? {
         guard let mbox = email.mboxFileURL, email.mboxLength > 0 else { return nil }
         let base = mbox.lastPathComponent.replacingOccurrences(of: ".mbox", with: "")
         let url = mbox.deletingLastPathComponent()
             .appendingPathComponent("archive")
-            .appendingPathComponent("\(base)_\(email.mboxOffset).html")
+            .appendingPathComponent("\(base)_\(email.mboxOffset).eml")
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
@@ -39,8 +39,11 @@ struct EmailDetailView: View {
         }
         .task(id: "\(email.id)-\(showArchived)") {
             guard showArchived, archivedHTML == nil, let url = archivedFileURL else { return }
-            let html = await Task.detached { try? String(contentsOf: url, encoding: .utf8) }.value
-            archivedHTML = html ?? ""
+            let html = await Task.detached {
+                guard let data = try? Data(contentsOf: url) else { return "" }
+                return MessageArchiver.renderHTML(fromEML: data)
+            }.value
+            archivedHTML = html
         }
         .alert("Échec de l'export", isPresented: Binding(
             get: { exportError != nil },
