@@ -22,7 +22,7 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 - **Direct IMAP backup** over TLS (port 993). Works with Gmail, iCloud, Fastmail, Proton Bridge, self-hosted Dovecot/Cyrus, etc.
 - **Incremental sync** based on `UIDVALIDITY` + per-folder UID tracking. Re-runs only download new messages.
 - **Configurable message filter** per account: All / Read only / Unread only / Flagged.
-- **Full archive mode** (per account, opt-in): fetches remote hot-linked images and embeds attachments into one self-contained `.html` per message — your mail stays complete even after the sender drops the images.
+- **Full archive mode** (per account, opt-in): writes one self-contained `.eml` per message — a real, standards-compliant email you can re-import into any mail client, with remote hot-linked images fetched and embedded as `cid:` inline parts and attachments included. Your mail stays complete even after the sender drops the images.
 - **Open archive format**: Unix `.mbox` files split by year-month, plus a sidecar JSON index for fast browsing. Messages are stored byte-for-byte (non-UTF-8 safe).
 - **Built-in viewer**: read backed-up emails directly inside the app — remote images are **blocked by default** for privacy, with per-message opt-in.
 - **Restore** entire folders or individual messages back to any IMAP server, original `INTERNALDATE` preserved.
@@ -37,7 +37,7 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 
 ## Installation
 
-1. Download **[`MailKeep-1.7.zip`](https://github.com/Kitround/MailKeep/releases/latest)** from the latest release.
+1. Download **[`MailKeep-1.8.1.zip`](https://github.com/Kitround/MailKeep/releases/latest)** from the latest release.
 2. Unzip and move `MailKeep.app` into `/Applications`.
 3. First launch: right-click → **Open** to bypass Gatekeeper (the app is signed ad-hoc, not notarised).
 4. Pick a backup folder when prompted — this is where `.mbox` files will be written.
@@ -61,7 +61,7 @@ Universal binary (Apple Silicon + Intel) · macOS 14 (Sonoma) or later.
 |---|---|
 | Mailboxes (`.mbox` files, one per year-month) | The folder you picked at first launch |
 | Search index (JSON, per folder) | Same folder, next to the `.mbox` |
-| Full-archive copies (`.html`, when enabled) | `archive/` subfolder next to the `.mbox` |
+| Full-archive copies (`.eml`, one per mail, when enabled) | `archive/` subfolder next to the `.mbox` |
 | UID state (per folder) | `~/Library/Containers/com.mailkeep.MailKeep/Data/Library/Application Support/` |
 | IMAP passwords | macOS Keychain (service `com.mailkeep.MailKeep.imap`) |
 
@@ -87,13 +87,21 @@ Restored messages arrive flagged `\Seen` (server-side limitation: original flags
 
 `UID FETCH` uses `BODY.PEEK[]`, so the `\Seen` flag is never changed on the server.
 
-## Full archive (offline images & attachments)
+## Full archive (one self-contained `.eml` per mail)
 
 The `.mbox` always contains the complete message, so **inline images and attachments are already saved**. What is *not* in any email are **remote hot-linked images** (`<img src="https://…">`) — they live on the sender's server and vanish when it drops them.
 
-Enable **Full archive** on an account (Settings → *Archive complète*, off by default) to also write a self-contained `.html` per message: remote images are fetched and inlined as `data:` URIs, attachments embedded, all in one portable file you can open in any browser. The viewer shows it via the **Archived copy** button.
+Enable **Full archive** on an account (Settings → *Archive complète*, off by default) to also write a self-contained **`.eml` per message** in the `archive/` folder:
+
+- A real, standards-compliant email — **re-importable into any mail client** (Apple Mail, Thunderbird, Outlook…).
+- **Remote images fetched and embedded** as `cid:` inline parts (responses are validated as real images, so CDN error pages aren't stored).
+- **Attachments included** (RFC 2231 filename encoding for non-ASCII names).
+
+In the app, the email viewer shows the offline copy via the **Copie archivée** button. The `.mbox` stays the byte-exact canonical backup; the `.eml` is a separate portable copy.
 
 > Tradeoff: fetching remote images makes HTTP requests to sender servers at backup time, revealing your IP — the same thing the viewer's blocker prevents. That's why it's opt-in.
+>
+> Already ran a Full-archive backup on 1.7/1.8.0? Those `.eml` files predate the 1.8.1 fixes — re-run the backup for those folders to regenerate them.
 
 ---
 
