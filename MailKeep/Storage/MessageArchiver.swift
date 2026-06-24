@@ -187,7 +187,7 @@ enum MessageArchiver {
         h += "Content-Transfer-Encoding: base64\r\n"
         if let contentID { h += "Content-ID: <\(contentID)>\r\n" }
         if let filename {
-            h += "Content-Disposition: attachment; filename=\"\(filename)\"\r\n"
+            h += dispositionHeader(filename: filename)
         }
         let b64 = data.base64EncodedString(options: [.lineLength76Characters, .endLineWithCarriageReturn, .endLineWithLineFeed])
         return h + "\r\n" + b64 + "\r\n"
@@ -219,6 +219,37 @@ enum MessageArchiver {
     private static func encodeHeader(_ s: String) -> String {
         if s.allSatisfy({ $0.isASCII }) && !s.contains("\r") && !s.contains("\n") { return s }
         return "=?UTF-8?B?\(Data(s.utf8).base64EncodedString())?="
+    }
+
+    /// Content-Disposition for an attachment. Pure-ASCII names are quoted (with `"`/`\`
+    /// escaped); non-ASCII names use RFC 2231 `filename*=UTF-8''…` plus an ASCII fallback.
+    private static func dispositionHeader(filename: String) -> String {
+        let clean = filename.replacingOccurrences(of: "\r", with: "")
+                            .replacingOccurrences(of: "\n", with: "")
+        let isASCII = clean.allSatisfy { $0.isASCII }
+        if isASCII {
+            let escaped = clean.replacingOccurrences(of: "\\", with: "\\\\")
+                               .replacingOccurrences(of: "\"", with: "\\\"")
+            return "Content-Disposition: attachment; filename=\"\(escaped)\"\r\n"
+        }
+        let fallback = String(clean.unicodeScalars.map { $0.isASCII && $0 != "\"" && $0 != "\\" ? Character($0) : "_" })
+        return "Content-Disposition: attachment; filename=\"\(fallback)\"; filename*=UTF-8''\(rfc2231Encode(clean))\r\n"
+    }
+
+    private static func rfc2231Encode(_ s: String) -> String {
+        // attr-char set per RFC 2231 / 5987 — everything else is percent-encoded.
+        let allowed = CharacterSet(charactersIn:
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$&+-.^_`|~")
+        var out = ""
+        for byte in Data(s.utf8) {
+            let scalar = UnicodeScalar(byte)
+            if scalar.isASCII && allowed.contains(scalar) {
+                out.unicodeScalars.append(scalar)
+            } else {
+                out += String(format: "%%%02X", byte)
+            }
+        }
+        return out
     }
 
     private static func rfc2822Date(_ date: Date) -> String {
