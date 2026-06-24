@@ -48,9 +48,12 @@ struct AccountSettingsView: View {
 
                 Section("Archive complète") {
                     Toggle("Télécharger et inclure les images distantes", isOn: $account.archiveFullContent)
+                    Text("Le .mbox contient déjà chaque mail complet, pièces jointes et images intégrées comprises — c'est la sauvegarde de référence.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text(account.archiveFullContent
-                         ? "Chaque message est aussi enregistré en fichier .eml autonome (un par mail) : images distantes téléchargées et intégrées, pièces jointes incluses. Réimportable dans n'importe quel client mail. ⚠️ Télécharge depuis les serveurs des expéditeurs au moment du backup."
-                         : "Les pièces jointes et images intégrées sont déjà sauvegardées dans le .mbox. Activez pour aussi archiver les images distantes (liens http) dans un .eml autonome par mail, avant qu'elles ne disparaissent.")
+                         ? "En plus, chaque mail est enregistré dans un fichier .eml autonome qui récupère les images distantes (liens http) avant qu'elles ne disparaissent. Réimportable dans n'importe quel client mail. ⚠️ Télécharge depuis les serveurs des expéditeurs au moment du backup."
+                         : "Activez pour créer en plus, par mail, un .eml autonome qui récupère les images distantes (liens http) avant qu'elles ne disparaissent.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
