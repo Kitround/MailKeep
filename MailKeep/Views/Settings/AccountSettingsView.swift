@@ -46,6 +46,15 @@ struct AccountSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section("Archive complète") {
+                    Toggle("Télécharger et inclure les images distantes", isOn: $account.archiveFullContent)
+                    Text(account.archiveFullContent
+                         ? "Chaque message est aussi enregistré en fichier .html autonome (images distantes téléchargées + pièces jointes intégrées). ⚠️ Télécharge depuis les serveurs des expéditeurs au moment du backup."
+                         : "Les pièces jointes et images intégrées sont déjà sauvegardées dans le .mbox. Activez pour aussi archiver les images distantes (liens http) avant qu'elles ne disparaissent.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Dossiers à sauvegarder") {
                     if account.folders.isEmpty {
                         Text("Aucun dossier sélectionné")

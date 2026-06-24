@@ -18,6 +18,7 @@
 		2C48E3011920EE199A7AFF3E /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B6D60924C37AF4CAB8909D1 /* DetailView.swift */; };
 		3661179DE439CF4665052788 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08679EA1153904D69D642875 /* AppState.swift */; };
 		3CE0F2E28C9B08D29D5519A8 /* MboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A91FB4A40E183D17D0B6A97 /* MboxStore.swift */; };
+		A1B2C3D400000000000000B2 /* MessageArchiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000000B1 /* MessageArchiver.swift */; };
 		4A38E065E7D0DF40E9055557 /* MailFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 299DA65CF0EB841D5B4A98AF /* MailFolder.swift */; };
 		5D4417CFDC34688E673D6A06 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380D9B35786DBC735431D8D0 /* SidebarView.swift */; };
 		5D5513EF9072D80B03228E23 /* EmailDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E601D476F90A2415C8E4637 /* EmailDetailView.swift */; };
@@ -73,6 +74,7 @@
 		7E601D476F90A2415C8E4637 /* EmailDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailDetailView.swift; sourceTree = "<group>"; };
 		80D9F0233FEC8ECB9D5783CA /* MailKeepApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailKeepApp.swift; sourceTree = "<group>"; };
 		8A91FB4A40E183D17D0B6A97 /* MboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MboxStore.swift; sourceTree = "<group>"; };
+		A1B2C3D400000000000000B1 /* MessageArchiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageArchiver.swift; sourceTree = "<group>"; };
 		8AD7DFA796E57E53E3F202B7 /* BackupHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupHistoryView.swift; sourceTree = "<group>"; };
 		8AD804312F96670800ADD8BA /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = AppIcon.icon; path = MailKeep/AppIcon.icon; sourceTree = SOURCE_ROOT; };
 		8C2200602ABF1CCF81008805 /* SchedulerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchedulerService.swift; sourceTree = "<group>"; };
@@ -132,6 +134,7 @@
 				4D271ACA03CBE7B4FBC20ACD /* EmailParser.swift */,
 				2FE8F3218EA1E2C4637859FA /* KeychainStore.swift */,
 				8A91FB4A40E183D17D0B6A97 /* MboxStore.swift */,
+				A1B2C3D400000000000000B1 /* MessageArchiver.swift */,
 				73BFCC668CF1B8FD7080362C /* StateStore.swift */,
 			);
 			path = Storage;
@@ -367,6 +370,7 @@
 				4A38E065E7D0DF40E9055557 /* MailFolder.swift in Sources */,
 				F441A14447FF31E29772B60B /* MailKeepApp.swift in Sources */,
 				3CE0F2E28C9B08D29D5519A8 /* MboxStore.swift in Sources */,
+				A1B2C3D400000000000000B2 /* MessageArchiver.swift in Sources */,
 				9278997A0236B0315FAAD03A /* MenuBarView.swift in Sources */,
 				7A6E87028C4EBC4D567986BF /* ProgressDetailView.swift in Sources */,
 				7B385408D3D3EDA5747E1D63 /* RestoreMessageView.swift in Sources */,
@@ -389,7 +393,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = MailKeep/MailKeep.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				INFOPLIST_FILE = MailKeep/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MailKeep;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -399,7 +403,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.6.1;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mailkeep.MailKeep;
 				PRODUCT_NAME = MailKeep;
 				SDKROOT = macosx;
@@ -413,7 +417,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = MailKeep/MailKeep.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				INFOPLIST_FILE = MailKeep/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MailKeep;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -423,7 +427,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.6.1;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mailkeep.MailKeep;
 				PRODUCT_NAME = MailKeep;
 				SDKROOT = macosx;

@@ -26,6 +26,19 @@ struct MboxStore {
             .appendingPathComponent("\(sanitize(folderName))_index.json")
     }
 
+    static func archiveDir(baseDir: URL, account: IMAPAccount) -> URL {
+        accountDir(baseDir: baseDir, account: account)
+            .appendingPathComponent("archive", isDirectory: true)
+    }
+
+    /// Self-contained .html archive path for one message, keyed by its mbox file +
+    /// byte offset — deterministic at both backup time and display time.
+    static func archiveURL(baseDir: URL, account: IMAPAccount, mboxFilename: String, offset: Int64) -> URL {
+        let base = mboxFilename.replacingOccurrences(of: ".mbox", with: "")
+        return archiveDir(baseDir: baseDir, account: account)
+            .appendingPathComponent("\(base)_\(offset).html")
+    }
+
     static func accountDir(baseDir: URL, account: IMAPAccount) -> URL {
         baseDir.appendingPathComponent(accountDirName(account), isDirectory: true)
     }

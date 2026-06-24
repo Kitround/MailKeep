@@ -8,6 +8,18 @@ struct EmailDetailView: View {
     @State private var showRestoreSheet = false
     @State private var allowRemoteContent = false
     @State private var exportError: String? = nil
+    @State private var showArchived = false
+    @State private var archivedHTML: String? = nil
+
+    /// Path to the self-contained .html archive for this message, if it exists.
+    private var archivedFileURL: URL? {
+        guard let mbox = email.mboxFileURL, email.mboxLength > 0 else { return nil }
+        let base = mbox.lastPathComponent.replacingOccurrences(of: ".mbox", with: "")
+        let url = mbox.deletingLastPathComponent()
+            .appendingPathComponent("archive")
+            .appendingPathComponent("\(base)_\(email.mboxOffset).html")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +32,16 @@ struct EmailDetailView: View {
             bodySection
         }
         .navigationTitle(email.subject)
-        .onChange(of: email.id) { _, _ in allowRemoteContent = false }
+        .onChange(of: email.id) { _, _ in
+            allowRemoteContent = false
+            showArchived = false
+            archivedHTML = nil
+        }
+        .task(id: "\(email.id)-\(showArchived)") {
+            guard showArchived, archivedHTML == nil, let url = archivedFileURL else { return }
+            let html = await Task.detached { try? String(contentsOf: url, encoding: .utf8) }.value
+            archivedHTML = html ?? ""
+        }
         .alert("Échec de l'export", isPresented: Binding(
             get: { exportError != nil },
             set: { if !$0 { exportError = nil } }
@@ -151,7 +172,29 @@ struct EmailDetailView: View {
 
     private var bodySection: some View {
         Group {
-            if let html = email.bodyHTML, !html.isEmpty {
+            if showArchived {
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "archivebox.fill")
+                            .foregroundStyle(.green)
+                        Text("Copie archivée hors-ligne — images intégrées au backup.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Version originale") { showArchived = false }
+                            .controlSize(.small)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .background(.quaternary.opacity(0.5))
+                    Divider()
+                    if let html = archivedHTML {
+                        WebView(html: html, allowRemoteContent: false)
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            } else if let html = email.bodyHTML, !html.isEmpty {
                 VStack(spacing: 0) {
                     if !allowRemoteContent {
                         HStack(spacing: 8) {
@@ -161,6 +204,10 @@ struct EmailDetailView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
+                            if archivedFileURL != nil {
+                                Button("Copie archivée") { showArchived = true }
+                                    .controlSize(.small)
+                            }
                             Button("Charger") { allowRemoteContent = true }
                                 .controlSize(.small)
                         }

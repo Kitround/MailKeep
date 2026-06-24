@@ -12,15 +12,18 @@ struct IMAPAccount: Identifiable, Codable, Hashable {
     /// Filter applied to UID SEARCH when picking which messages to back up.
     /// Default = .seen for backwards compatibility with the original behaviour.
     var messageFilter: MessageFilter = .seen
+    /// When true, each backed-up message also gets a self-contained .html archive
+    /// (remote images fetched + inlined, attachments embedded). Off by default —
+    /// fetching remote content over HTTP leaks the IP/open signal to senders.
+    var archiveFullContent: Bool = false
 
     static func new() -> IMAPAccount {
         IMAPAccount(label: "", host: "", username: "")
     }
 
-    // Custom decoding so accounts persisted before `messageFilter` was added
-    // still decode (default = .seen, the old hardcoded behaviour).
+    // Custom decoding so accounts persisted before new fields were added still decode.
     private enum CodingKeys: String, CodingKey {
-        case id, label, host, port, username, folders, isEnabled, schedule, messageFilter
+        case id, label, host, port, username, folders, isEnabled, schedule, messageFilter, archiveFullContent
     }
 
     init(from decoder: Decoder) throws {
@@ -34,12 +37,14 @@ struct IMAPAccount: Identifiable, Codable, Hashable {
         self.isEnabled = try c.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.schedule = try c.decodeIfPresent(BackupSchedule.self, forKey: .schedule) ?? BackupSchedule()
         self.messageFilter = try c.decodeIfPresent(MessageFilter.self, forKey: .messageFilter) ?? .seen
+        self.archiveFullContent = try c.decodeIfPresent(Bool.self, forKey: .archiveFullContent) ?? false
     }
 
     init(id: UUID = UUID(), label: String, host: String, port: Int = 993,
          username: String, folders: [MailFolder] = [], isEnabled: Bool = true,
          schedule: BackupSchedule = BackupSchedule(),
-         messageFilter: MessageFilter = .seen) {
+         messageFilter: MessageFilter = .seen,
+         archiveFullContent: Bool = false) {
         self.id = id
         self.label = label
         self.host = host
@@ -49,6 +54,7 @@ struct IMAPAccount: Identifiable, Codable, Hashable {
         self.isEnabled = isEnabled
         self.schedule = schedule
         self.messageFilter = messageFilter
+        self.archiveFullContent = archiveFullContent
     }
 }
 

@@ -97,7 +97,8 @@ enum EmailParser {
         // Explicit attachment disposition → collect as attachment
         if dispLower.hasPrefix("attachment") {
             if let att = makeAttachment(data: data, contentType: contentType,
-                                        disposition: disposition, encoding: transferEncoding) {
+                                        disposition: disposition, encoding: transferEncoding,
+                                        contentID: headers["content-id"]) {
                 msg.attachments.append(att)
             }
             return
@@ -117,9 +118,11 @@ enum EmailParser {
             return
         }
 
-        // Non-text, non-multipart (image/*, application/*, etc.) → attachment
+        // Non-text, non-multipart (image/*, application/*, etc.) → attachment.
+        // Inline images (cid:) keep their Content-ID so the archiver can resolve them.
         if let att = makeAttachment(data: data, contentType: contentType,
-                                    disposition: disposition, encoding: transferEncoding) {
+                                    disposition: disposition, encoding: transferEncoding,
+                                    contentID: headers["content-id"]) {
             msg.attachments.append(att)
         }
     }
@@ -127,7 +130,8 @@ enum EmailParser {
     // MARK: - Attachment helpers
 
     private static func makeAttachment(data: Data, contentType: String,
-                                       disposition: String, encoding: String) -> EmailAttachment? {
+                                       disposition: String, encoding: String,
+                                       contentID: String?) -> EmailAttachment? {
         guard !data.isEmpty else { return nil }
         let mimeType = contentType.components(separatedBy: ";")
             .first?.trimmingCharacters(in: .whitespaces).lowercased() ?? "application/octet-stream"
@@ -148,7 +152,10 @@ enum EmailParser {
             decoded = data
         }
         guard !decoded.isEmpty else { return nil }
-        return EmailAttachment(filename: filename, mimeType: mimeType, data: decoded)
+        let cid = contentID?.trimmingCharacters(in: .init(charactersIn: "<> \t\r\n"))
+        return EmailAttachment(filename: filename, mimeType: mimeType, data: decoded,
+                               contentID: cid?.isEmpty == false ? cid : nil,
+                               isInline: disposition.lowercased().contains("inline"))
     }
 
     private static func extractFilename(from contentType: String, disposition: String) -> String? {

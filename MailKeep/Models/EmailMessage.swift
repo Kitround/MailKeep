@@ -5,6 +5,8 @@ struct EmailAttachment: Identifiable {
     let filename: String   // ex. "rapport.pdf"
     let mimeType: String   // ex. "application/pdf"
     let data: Data         // décodé (base64/QP résolu)
+    var contentID: String? = nil   // Content-ID without <> — for cid: inline images
+    var isInline: Bool = false     // Content-Disposition: inline
 
     var size: Int { data.count }
 

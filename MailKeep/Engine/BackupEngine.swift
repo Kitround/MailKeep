@@ -167,6 +167,14 @@ final class BackupEngine: ObservableObject {
                 bytesWritten += Int64(fileLength)
                 downloadedUIDs.insert(uid)
 
+                if account.archiveFullContent {
+                    let archiveURL = MboxStore.archiveURL(
+                        baseDir: baseURL, account: account,
+                        mboxFilename: mboxURL.lastPathComponent, offset: fileOffset
+                    )
+                    await MessageArchiver.archive(rfc822: msg.rfc822, to: archiveURL)
+                }
+
                 let headerMsg = EmailParser.parseHeadersOnly(data: msg.rfc822)
                 indexEntries.append(EmailIndexEntry(
                     id: headerMsg.id,
@@ -498,6 +506,15 @@ final class BackupEngine: ObservableObject {
 
         if let contents = try? fm.contentsOfDirectory(at: accountDir, includingPropertiesForKeys: nil) {
             for url in contents where url.pathExtension == "mbox"
+                && url.lastPathComponent.hasPrefix(safeFolder) {
+                try? fm.removeItem(at: url)
+            }
+        }
+
+        // Self-contained .html archives for this folder (named "<folder>_<period>_<offset>.html")
+        let archiveDir = MboxStore.archiveDir(baseDir: baseURL, account: account)
+        if let contents = try? fm.contentsOfDirectory(at: archiveDir, includingPropertiesForKeys: nil) {
+            for url in contents where url.pathExtension == "html"
                 && url.lastPathComponent.hasPrefix(safeFolder) {
                 try? fm.removeItem(at: url)
             }
