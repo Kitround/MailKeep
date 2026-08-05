@@ -42,8 +42,8 @@ struct FolderRowView: View {
 
             // Actions du dossier — mêmes entrées que la page de détail,
             // accessibles même quand un email est ouvert.
-            // Boîte de SidebarIcon.box et padding identiques à la roue crantée
-            // de AccountRowView : c'est ce qui aligne les deux colonnes d'icônes.
+            // Taille libre : contraindre un Menu borderless dans un cadre fixe lui
+            // fait dessiner son bezel (carré noir en dark mode) à la place du glyphe.
             Menu {
                 folderActions
             } label: {
@@ -53,10 +53,9 @@ struct FolderRowView: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .buttonStyle(.plain)
-            .frame(width: SidebarIcon.box, height: SidebarIcon.box)
+            .fixedSize()
             .opacity(isHovered ? 1 : 0.5)
-            .padding(.trailing, 8)
+            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.menuChromeInset)
             .help("Actions du dossier")
         }
         .listRowBackground(

@@ -1,12 +1,16 @@
 import SwiftUI
 
 /// Métriques partagées des icônes d'action de la sidebar (roue crantée des
-/// comptes, menu « … » des dossiers). Même taille et même boîte des deux côtés,
-/// sinon les deux colonnes d'icônes ne s'alignent pas.
+/// comptes, menu « … » des dossiers), pour que les deux colonnes s'alignent.
 enum SidebarIcon {
     /// 17 = taille de `.body` (13) + 4, demandé pour la lisibilité.
     static let font = Font.system(size: 17)
-    static let box: CGFloat = 22
+    /// Marge droite de la roue crantée.
+    static let trailing: CGFloat = 8
+    /// Un `Menu` borderless réserve de la place pour son indicateur, même masqué :
+    /// son glyphe tombe donc à gauche de la roue crantée à marge égale. Molette de
+    /// calibration — augmenter si le « … » reste trop à gauche, diminuer sinon.
+    static let menuChromeInset: CGFloat = 3
 }
 
 struct SidebarView: View {
