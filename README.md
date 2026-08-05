@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon.svg" alt="MailKeep" width="128" height="128">
+  <img src="docs/icon.png" alt="MailKeep" width="128" height="128">
 </p>
 
 <h1 align="center">MailKeep</h1>
