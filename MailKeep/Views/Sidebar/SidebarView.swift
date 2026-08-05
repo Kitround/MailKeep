@@ -3,8 +3,8 @@ import SwiftUI
 /// Métriques partagées des icônes d'action de la sidebar (roue crantée des
 /// comptes, menu « … » des dossiers), pour que les deux colonnes s'alignent.
 enum SidebarIcon {
-    /// 17 = taille de `.body` (13) + 4, demandé pour la lisibilité.
-    static let font = Font.system(size: 17)
+    /// 16 = taille de `.body` (13) + 3, calée à l'œil.
+    static let font = Font.system(size: 16)
     /// Marge droite du glyphe, identique pour les deux icônes.
     static let trailing: CGFloat = 8
     /// Boîte fixe partagée : c'est elle qui aligne les deux colonnes d'icônes.
@@ -15,8 +15,9 @@ enum SidebarIcon {
     static var overhang: CGFloat { (hit - box) / 2 }
 }
 
-/// Glyphe d'action de la sidebar : taille, couleurs, pastille de survol et zone
-/// cliquable élargie. Partagé pour que roue crantée et menu « … » soient identiques.
+/// Glyphe d'action de la sidebar : taille, couleurs et zone cliquable élargie.
+/// Partagé pour que roue crantée et menu « … » soient identiques. Survol = couleur
+/// seule, pas de fond.
 struct SidebarIconLabel: View {
     let systemName: String
     let isHovered: Bool
@@ -26,10 +27,6 @@ struct SidebarIconLabel: View {
             .font(SidebarIcon.font)
             .foregroundStyle(isHovered ? .primary : .secondary)
             .frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isHovered ? Color.primary.opacity(0.12) : .clear)
-            )
             .contentShape(Rectangle())
     }
 }
