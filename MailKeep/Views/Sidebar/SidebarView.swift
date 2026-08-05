@@ -1,4 +1,61 @@
 import SwiftUI
+import AppKit
+
+/// Une entrée de menu décrite une seule fois, rendue soit par SwiftUI (clic droit)
+/// soit par AppKit (bouton « … » de la sidebar).
+struct MenuAction {
+    let title: String
+    let enabled: Bool
+    let isSeparator: Bool
+    let run: () -> Void
+
+    init(_ title: String, enabled: Bool = true, run: @escaping () -> Void) {
+        self.title = title
+        self.enabled = enabled
+        self.isSeparator = false
+        self.run = run
+    }
+
+    static let separator = MenuAction(separator: ())
+
+    private init(separator _: ()) {
+        title = ""
+        enabled = false
+        isSeparator = true
+        run = {}
+    }
+}
+
+extension NSMenu {
+    /// Ouvre un vrai menu macOS au pointeur. Préféré à un `Menu` SwiftUI : celui-ci
+    /// impose son propre chrome, qui décale son glyphe par rapport aux autres icônes
+    /// de la sidebar et le noircit en dark mode.
+    static func popUpAtPointer(items: [MenuAction]) {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for item in items {
+            menu.addItem(item.isSeparator ? .separator() : ClosureMenuItem(item))
+        }
+        guard let event = NSApp.currentEvent, let view = event.window?.contentView else { return }
+        menu.popUp(positioning: nil, at: view.convert(event.locationInWindow, from: nil), in: view)
+    }
+}
+
+/// `NSMenuItem` qui appelle une closure — AppKit ne sait cibler que des sélecteurs.
+private final class ClosureMenuItem: NSMenuItem {
+    private let handler: () -> Void
+
+    init(_ action: MenuAction) {
+        handler = action.run
+        super.init(title: action.title, action: #selector(fire), keyEquivalent: "")
+        target = self
+        isEnabled = action.enabled
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) non supporté") }
+
+    @objc private func fire() { handler() }
+}
 
 /// Métriques partagées des icônes d'action de la sidebar (roue crantée des
 /// comptes, menu « … » des dossiers), pour que les deux colonnes s'alignent.
@@ -9,10 +66,6 @@ enum SidebarIcon {
     static let trailing: CGFloat = 8
     /// Marge cliquable autour du glyphe : 16 + 2×6 = zone de 28.
     static let pad: CGFloat = 6
-    /// Un `Menu` borderless réserve de la place pour son indicateur même masqué :
-    /// son glyphe tombe à gauche de la roue crantée à marge égale. Molette de
-    /// calibration — monter si le « … » reste trop à gauche, baisser sinon.
-    static let menuChromeInset: CGFloat = 3
 }
 
 /// Glyphe d'action de la sidebar : taille, couleurs et zone cliquable élargie par

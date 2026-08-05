@@ -43,22 +43,18 @@ struct FolderRowView: View {
 
             // Actions du dossier — mêmes entrées que la page de détail,
             // accessibles même quand un email est ouvert.
-            // Le glyphe est un Image, exactement comme la roue crantée du compte :
-            // même boîte donc même alignement, et couleurs dynamiques correctes.
-            // Le Menu ne sert qu'à la zone cliquable — dessiné, un Menu borderless
-            // contraint à une boîte fixe rend son bezel (tuile noire en dark mode).
-            Menu {
-                folderActions
+            // Bouton strictement identique à la roue crantée du compte (même label,
+            // même padding) : alignement et couleurs par construction. Un Menu SwiftUI
+            // ne convenait pas — son chrome décale le glyphe et le noircit en dark mode.
+            Button {
+                NSMenu.popUpAtPointer(items: actionItems)
             } label: {
                 SidebarIconLabel(systemName: "ellipsis.circle", isHovered: iconHovered)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .buttonStyle(.plain)   // sans ça, le menu rend son bezel : glyphe noir en dark mode
-            .fixedSize()
+            .buttonStyle(.plain)
             .onHover { iconHovered = $0 }
             .opacity(isHovered || iconHovered ? 1 : 0.5)
-            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.pad - SidebarIcon.menuChromeInset)
+            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.pad)
             .help("Actions du dossier")
         }
         .listRowBackground(
@@ -98,30 +94,39 @@ struct FolderRowView: View {
         appState.selectedEmail = nil
     }
 
+    /// Source unique des actions : sert au menu du bouton « … » comme au clic droit.
+    private var actionItems: [MenuAction] {
+        let noBackupDir = appState.backupBaseURL == nil
+        return [
+            MenuAction("Sauvegarder maintenant",
+                       enabled: !isRunning && folder.isEnabled && !noBackupDir) {
+                Task { await backupEngine.backupFolder(account: account, folder: folder) }
+            },
+            MenuAction("Restaurer…", enabled: !isRunning && !noBackupDir) {
+                select()
+                showRestore = true
+            },
+            MenuAction("Importer des fichiers mbox…", enabled: !isRunning && !noBackupDir) {
+                backupEngine.importMbox(for: folder, on: account)
+            },
+            .separator,
+            MenuAction("Supprimer la sauvegarde…", enabled: !isRunning && !noBackupDir) {
+                showDeleteConfirm = true
+            },
+        ]
+    }
+
     @ViewBuilder
     private var folderActions: some View {
-        Button("Sauvegarder maintenant") {
-            Task { await backupEngine.backupFolder(account: account, folder: folder) }
+        let items = actionItems
+        ForEach(items.indices, id: \.self) { i in
+            if items[i].isSeparator {
+                Divider()
+            } else {
+                Button(items[i].title) { items[i].run() }
+                    .disabled(!items[i].enabled)
+            }
         }
-        .disabled(isRunning || !folder.isEnabled || appState.backupBaseURL == nil)
-
-        Button("Restaurer…") {
-            select()
-            showRestore = true
-        }
-        .disabled(isRunning || appState.backupBaseURL == nil)
-
-        Button("Importer des fichiers mbox…") {
-            backupEngine.importMbox(for: folder, on: account)
-        }
-        .disabled(isRunning || appState.backupBaseURL == nil)
-
-        Divider()
-
-        Button("Supprimer la sauvegarde…", role: .destructive) {
-            showDeleteConfirm = true
-        }
-        .disabled(isRunning || appState.backupBaseURL == nil)
     }
 
     private var iconName: String {
