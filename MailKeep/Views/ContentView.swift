@@ -8,7 +8,9 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
+                // min sert de largeur au premier lancement : SwiftUI n'applique pas
+                // `ideal` tant qu'aucun état de split n'a été restauré.
+                .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 360)
                 .toolbar(removing: .sidebarToggle)
         } content: {
             // Center panel: email list if mbox available, else backup history
