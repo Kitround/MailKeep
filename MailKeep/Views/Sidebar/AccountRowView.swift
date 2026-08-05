@@ -46,6 +46,7 @@ struct AccountRowView: View {
                     .foregroundStyle(isHovered ? .primary : .secondary)
             }
             .buttonStyle(.plain)
+            .frame(width: SidebarIcon.box, height: SidebarIcon.box)
             .help("Réglages du compte")
             .opacity(isHovered ? 1 : 0.5)
             .padding(.trailing, SidebarIcon.trailing)

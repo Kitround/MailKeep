@@ -42,21 +42,27 @@ struct FolderRowView: View {
 
             // Actions du dossier — mêmes entrées que la page de détail,
             // accessibles même quand un email est ouvert.
-            // Taille libre : contraindre un Menu borderless dans un cadre fixe lui
-            // fait dessiner son bezel (carré noir en dark mode) à la place du glyphe.
-            Menu {
-                folderActions
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(SidebarIcon.font)
-                    .foregroundStyle(isHovered ? .primary : .secondary)
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .opacity(isHovered ? 1 : 0.5)
-            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.menuChromeInset)
-            .help("Actions du dossier")
+            // Le glyphe est un Image, exactement comme la roue crantée du compte :
+            // même boîte donc même alignement, et couleurs dynamiques correctes.
+            // Le Menu ne sert qu'à la zone cliquable — dessiné, un Menu borderless
+            // contraint à une boîte fixe rend son bezel (tuile noire en dark mode).
+            Image(systemName: "ellipsis.circle")
+                .font(SidebarIcon.font)
+                .foregroundStyle(isHovered ? .primary : .secondary)
+                .opacity(isHovered ? 1 : 0.5)
+                .frame(width: SidebarIcon.box, height: SidebarIcon.box)
+                .overlay {
+                    Menu {
+                        folderActions
+                    } label: {
+                        Color.clear.contentShape(Rectangle())
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .opacity(0.01)   // invisible mais toujours cliquable
+                }
+                .padding(.trailing, SidebarIcon.trailing)
+                .help("Actions du dossier")
         }
         .listRowBackground(
             Rectangle().fill(

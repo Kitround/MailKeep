@@ -5,12 +5,10 @@ import SwiftUI
 enum SidebarIcon {
     /// 17 = taille de `.body` (13) + 4, demandé pour la lisibilité.
     static let font = Font.system(size: 17)
-    /// Marge droite de la roue crantée.
+    /// Marge droite, identique pour les deux icônes.
     static let trailing: CGFloat = 8
-    /// Un `Menu` borderless réserve de la place pour son indicateur, même masqué :
-    /// son glyphe tombe donc à gauche de la roue crantée à marge égale. Molette de
-    /// calibration — augmenter si le « … » reste trop à gauche, diminuer sinon.
-    static let menuChromeInset: CGFloat = 3
+    /// Boîte fixe partagée : c'est elle qui aligne les deux colonnes d'icônes.
+    static let box: CGFloat = 22
 }
 
 struct SidebarView: View {
