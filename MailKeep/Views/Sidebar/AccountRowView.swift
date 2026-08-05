@@ -48,7 +48,7 @@ struct AccountRowView: View {
             .onHover { gearHovered = $0 }
             .help("Réglages du compte")
             .opacity(isHovered || gearHovered ? 1 : 0.5)
-            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.overhang)
+            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.pad)
         }
         .listRowInsets(EdgeInsets(top: 20, leading: -3, bottom: 6, trailing: 0))
         .listRowBackground(

@@ -47,21 +47,19 @@ struct FolderRowView: View {
             // même boîte donc même alignement, et couleurs dynamiques correctes.
             // Le Menu ne sert qu'à la zone cliquable — dessiné, un Menu borderless
             // contraint à une boîte fixe rend son bezel (tuile noire en dark mode).
-            SidebarIconLabel(systemName: "ellipsis.circle", isHovered: iconHovered)
-                .overlay {
-                    Menu {
-                        folderActions
-                    } label: {
-                        Color.clear.contentShape(Rectangle())
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .opacity(0.01)   // invisible mais toujours cliquable
-                }
-                .onHover { iconHovered = $0 }
-                .opacity(isHovered || iconHovered ? 1 : 0.5)
-                .padding(.trailing, SidebarIcon.trailing - SidebarIcon.overhang)
-                .help("Actions du dossier")
+            Menu {
+                folderActions
+            } label: {
+                SidebarIconLabel(systemName: "ellipsis.circle", isHovered: iconHovered)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)   // sans ça, le menu rend son bezel : glyphe noir en dark mode
+            .fixedSize()
+            .onHover { iconHovered = $0 }
+            .opacity(isHovered || iconHovered ? 1 : 0.5)
+            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.pad - SidebarIcon.menuChromeInset)
+            .help("Actions du dossier")
         }
         .listRowBackground(
             Rectangle().fill(

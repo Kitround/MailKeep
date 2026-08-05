@@ -7,15 +7,16 @@ enum SidebarIcon {
     static let font = Font.system(size: 16)
     /// Marge droite du glyphe, identique pour les deux icônes.
     static let trailing: CGFloat = 8
-    /// Boîte fixe partagée : c'est elle qui aligne les deux colonnes d'icônes.
-    static let box: CGFloat = 22
-    /// Zone cliquable / survolable, plus large que le glyphe.
-    static let hit: CGFloat = 28
-    /// Débord de la zone cliquable de chaque côté du glyphe.
-    static var overhang: CGFloat { (hit - box) / 2 }
+    /// Marge cliquable autour du glyphe : 16 + 2×6 = zone de 28.
+    static let pad: CGFloat = 6
+    /// Un `Menu` borderless réserve de la place pour son indicateur même masqué :
+    /// son glyphe tombe à gauche de la roue crantée à marge égale. Molette de
+    /// calibration — monter si le « … » reste trop à gauche, baisser sinon.
+    static let menuChromeInset: CGFloat = 3
 }
 
-/// Glyphe d'action de la sidebar : taille, couleurs et zone cliquable élargie.
+/// Glyphe d'action de la sidebar : taille, couleurs et zone cliquable élargie par
+/// padding — pas par `frame`, qui pousse un `Menu` borderless à dessiner son bezel.
 /// Partagé pour que roue crantée et menu « … » soient identiques. Survol = couleur
 /// seule, pas de fond.
 struct SidebarIconLabel: View {
@@ -26,7 +27,7 @@ struct SidebarIconLabel: View {
         Image(systemName: systemName)
             .font(SidebarIcon.font)
             .foregroundStyle(isHovered ? .primary : .secondary)
-            .frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
+            .padding(SidebarIcon.pad)
             .contentShape(Rectangle())
     }
 }
