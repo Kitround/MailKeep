@@ -42,10 +42,11 @@ struct AccountRowView: View {
             }
             Button(action: onEdit) {
                 Image(systemName: "gearshape")
-                    .font(.body)
+                    .font(SidebarIcon.font)
                     .foregroundStyle(isHovered ? .primary : .secondary)
             }
             .buttonStyle(.plain)
+            .frame(width: SidebarIcon.box, height: SidebarIcon.box)
             .help("Réglages du compte")
             .opacity(isHovered ? 1 : 0.5)
             .padding(.trailing, 8)

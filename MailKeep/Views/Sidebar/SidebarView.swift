@@ -1,5 +1,14 @@
 import SwiftUI
 
+/// Métriques partagées des icônes d'action de la sidebar (roue crantée des
+/// comptes, menu « … » des dossiers). Même taille et même boîte des deux côtés,
+/// sinon les deux colonnes d'icônes ne s'alignent pas.
+enum SidebarIcon {
+    /// 17 = taille de `.body` (13) + 4, demandé pour la lisibilité.
+    static let font = Font.system(size: 17)
+    static let box: CGFloat = 22
+}
+
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var backupEngine: BackupEngine
