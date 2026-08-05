@@ -17,6 +17,7 @@ struct FolderRowView: View {
     }
 
     @State private var isHovered = false
+    @State private var iconHovered = false
     @State private var showRestore = false
     @State private var showDeleteConfirm = false
 
@@ -46,11 +47,7 @@ struct FolderRowView: View {
             // même boîte donc même alignement, et couleurs dynamiques correctes.
             // Le Menu ne sert qu'à la zone cliquable — dessiné, un Menu borderless
             // contraint à une boîte fixe rend son bezel (tuile noire en dark mode).
-            Image(systemName: "ellipsis.circle")
-                .font(SidebarIcon.font)
-                .foregroundStyle(isHovered ? .primary : .secondary)
-                .opacity(isHovered ? 1 : 0.5)
-                .frame(width: SidebarIcon.box, height: SidebarIcon.box)
+            SidebarIconLabel(systemName: "ellipsis.circle", isHovered: iconHovered)
                 .overlay {
                     Menu {
                         folderActions
@@ -61,7 +58,9 @@ struct FolderRowView: View {
                     .menuIndicator(.hidden)
                     .opacity(0.01)   // invisible mais toujours cliquable
                 }
-                .padding(.trailing, SidebarIcon.trailing)
+                .onHover { iconHovered = $0 }
+                .opacity(isHovered || iconHovered ? 1 : 0.5)
+                .padding(.trailing, SidebarIcon.trailing - SidebarIcon.overhang)
                 .help("Actions du dossier")
         }
         .listRowBackground(

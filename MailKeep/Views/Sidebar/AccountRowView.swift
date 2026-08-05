@@ -8,6 +8,7 @@ struct AccountRowView: View {
     let onEdit: () -> Void
 
     @State private var isHovered = false
+    @State private var gearHovered = false
 
     private var isBacking: Bool {
         appState.activeProgress.values.contains { $0.accountID == account.id }
@@ -41,15 +42,13 @@ struct AccountRowView: View {
                 ProgressView().controlSize(.small)
             }
             Button(action: onEdit) {
-                Image(systemName: "gearshape")
-                    .font(SidebarIcon.font)
-                    .foregroundStyle(isHovered ? .primary : .secondary)
+                SidebarIconLabel(systemName: "gearshape", isHovered: gearHovered)
             }
             .buttonStyle(.plain)
-            .frame(width: SidebarIcon.box, height: SidebarIcon.box)
+            .onHover { gearHovered = $0 }
             .help("Réglages du compte")
-            .opacity(isHovered ? 1 : 0.5)
-            .padding(.trailing, SidebarIcon.trailing)
+            .opacity(isHovered || gearHovered ? 1 : 0.5)
+            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.overhang)
         }
         .listRowInsets(EdgeInsets(top: 20, leading: -3, bottom: 6, trailing: 0))
         .listRowBackground(

@@ -5,10 +5,33 @@ import SwiftUI
 enum SidebarIcon {
     /// 17 = taille de `.body` (13) + 4, demandé pour la lisibilité.
     static let font = Font.system(size: 17)
-    /// Marge droite, identique pour les deux icônes.
+    /// Marge droite du glyphe, identique pour les deux icônes.
     static let trailing: CGFloat = 8
     /// Boîte fixe partagée : c'est elle qui aligne les deux colonnes d'icônes.
     static let box: CGFloat = 22
+    /// Zone cliquable / survolable, plus large que le glyphe.
+    static let hit: CGFloat = 28
+    /// Débord de la zone cliquable de chaque côté du glyphe.
+    static var overhang: CGFloat { (hit - box) / 2 }
+}
+
+/// Glyphe d'action de la sidebar : taille, couleurs, pastille de survol et zone
+/// cliquable élargie. Partagé pour que roue crantée et menu « … » soient identiques.
+struct SidebarIconLabel: View {
+    let systemName: String
+    let isHovered: Bool
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(SidebarIcon.font)
+            .foregroundStyle(isHovered ? .primary : .secondary)
+            .frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovered ? Color.primary.opacity(0.12) : .clear)
+            )
+            .contentShape(Rectangle())
+    }
 }
 
 struct SidebarView: View {
