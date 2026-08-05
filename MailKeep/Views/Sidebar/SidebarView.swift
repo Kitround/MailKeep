@@ -66,6 +66,10 @@ enum SidebarIcon {
     static let trailing: CGFloat = 8
     /// Marge cliquable autour du glyphe : 16 + 2×6 = zone de 28.
     static let pad: CGFloat = 6
+    /// Zone cliquable, et surtout boîte carrée commune : `gearshape` et
+    /// `ellipsis.circle` n'ont pas la même largeur intrinsèque, sans cadre imposé
+    /// leurs centres ne tombent pas au même endroit.
+    static var hit: CGFloat { 16 + 2 * pad }
 }
 
 /// Glyphe d'action de la sidebar : taille, couleurs et zone cliquable élargie par
@@ -80,7 +84,7 @@ struct SidebarIconLabel: View {
         Image(systemName: systemName)
             .font(SidebarIcon.font)
             .foregroundStyle(isHovered ? .primary : .secondary)
-            .padding(SidebarIcon.pad)
+            .frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
             .contentShape(Rectangle())
     }
 }
