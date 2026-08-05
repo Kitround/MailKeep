@@ -32,6 +32,8 @@ struct EmailDetailView: View {
             bodySection
         }
         .navigationTitle(email.subject)
+        // Échap referme l'email et rend la page d'actions du dossier.
+        .onExitCommand { appState.selectedEmail = nil }
         .onChange(of: email.id) { _, _ in
             allowRemoteContent = false
             showArchived = false
