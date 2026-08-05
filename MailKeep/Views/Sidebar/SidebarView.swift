@@ -147,7 +147,9 @@ private struct AccountSectionView: View {
             ForEach(account.folders) { folder in
                 FolderRowView(account: account, folder: folder)
                     .id(folder.id)
-                    .listRowInsets(EdgeInsets(top: 3, leading: 41, bottom: 3, trailing: 8))
+                    // trailing 0 : le menu « … » porte lui-même son padding de 8,
+                    // comme la roue crantée du compte, pour que les deux s'alignent.
+                    .listRowInsets(EdgeInsets(top: 3, leading: 41, bottom: 3, trailing: 0))
             }
         }
     }

@@ -42,16 +42,21 @@ struct FolderRowView: View {
 
             // Actions du dossier — mêmes entrées que la page de détail,
             // accessibles même quand un email est ouvert.
+            // Métriques calquées sur la roue crantée de AccountRowView pour
+            // que les deux icônes s'alignent verticalement dans la sidebar.
             Menu {
                 folderActions
             } label: {
                 Image(systemName: "ellipsis.circle")
+                    .font(.body)
                     .foregroundStyle(isHovered ? .primary : .secondary)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .buttonStyle(.plain)
             .fixedSize()
-            .opacity(isHovered || isSelected ? 1 : 0)
+            .opacity(isHovered ? 1 : 0.5)
+            .padding(.trailing, 8)
             .help("Actions du dossier")
         }
         .listRowBackground(
