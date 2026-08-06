@@ -11,28 +11,59 @@ import AppKit
 ///
 /// Assignation unique, sans effet sur la géométrie : contrairement aux bornes reposées en
 /// continu, elle ne relance pas la mise en page et ne lutte contre aucun geste.
-private struct SplitViewAutosaveDisabler: NSViewRepresentable {
-    final class Coordinator { var done = false }
+private struct SidebarWidthLock: NSViewRepresentable {
+    let width: CGFloat
+
+    final class Coordinator {
+        var observer: NSObjectProtocol?
+        var reapply: (() -> Void)?
+        deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        guard !context.coordinator.done else { return }
-        DispatchQueue.main.async {
-            var candidate: NSView? = nsView
-            while let view = candidate, !(view is NSSplitView) {
-                candidate = view.superview
-            }
-            guard let split = candidate as? NSSplitView else { return }
-            split.autosaveName = nil
-            // Second chemin de persistance, distinct des préférences : macOS réapplique la
-            // géométrie enregistrée dans l'état d'application sauvegardé, là encore après la
-            // mise en page. Une fenêtre non restaurable repart de la largeur demandée.
-            split.window?.isRestorable = false
-            context.coordinator.done = true
+        let coordinator = context.coordinator
+        coordinator.reapply = { [weak nsView] in
+            guard let nsView else { return }
+            apply(from: nsView)
         }
+        // SwiftUI reconstruit ses colonnes quand la colonne du milieu change de contenu —
+        // en plein backup, quand la liste d'emails remplace l'historique. Les épaisseurs
+        // posées sur l'ancien `NSSplitViewItem` disparaissent avec lui : on les repose.
+        // Les deux bornes étant égales, il n'existe aucune plage de glissement, donc rien
+        // à quoi ce code puisse s'opposer pendant que l'utilisateur tire le séparateur.
+        if coordinator.observer == nil {
+            coordinator.observer = NotificationCenter.default.addObserver(
+                forName: NSSplitView.didResizeSubviewsNotification, object: nil, queue: .main
+            ) { [weak coordinator] _ in
+                coordinator?.reapply?()
+            }
+        }
+        DispatchQueue.main.async { coordinator.reapply?() }
+    }
+
+    private func apply(from nsView: NSView) {
+        var candidate: NSView? = nsView
+        while let view = candidate, !(view.superview is NSSplitView) {
+            candidate = view.superview
+        }
+        guard let column = candidate,
+              let splitView = column.superview as? NSSplitView,
+              let controller = splitView.delegate as? NSSplitViewController,
+              let index = splitView.arrangedSubviews.firstIndex(of: column),
+              controller.splitViewItems.indices.contains(index) else { return }
+
+        // Épaisseurs identiques : la colonne ne peut ni être tirée, ni être écrasée par une
+        // géométrie restaurée. Écritures idempotentes, pour ne pas relancer la mise en page.
+        let item = controller.splitViewItems[index]
+        if item.minimumThickness != width { item.minimumThickness = width }
+        if item.maximumThickness != width { item.maximumThickness = width }
+        if item.canCollapse { item.canCollapse = false }
+        splitView.autosaveName = nil
+        splitView.window?.isRestorable = false
     }
 }
 
@@ -55,7 +86,9 @@ struct ContentView: View {
             // Ici il n'y a rien à borner ni à reposer.
             SidebarView()
                 .navigationSplitViewColumnWidth(sidebarWidth)
-                .background(SplitViewAutosaveDisabler())
+                // Seul mécanisme qui impose réellement la largeur : mesuré, la colonne
+                // faisait 272 pt de contenu pour une colonne rendue bien plus étroite.
+                .background(SidebarWidthLock(width: sidebarWidth))
                 .toolbar(removing: .sidebarToggle)
         } content: {
             // Center panel: email list if mbox available, else backup history
