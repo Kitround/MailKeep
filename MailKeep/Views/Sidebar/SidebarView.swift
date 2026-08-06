@@ -68,6 +68,9 @@ enum SidebarMetrics {
     /// Décor d'une ligne de dossier : retrait + icône + espacement, puis menu + marge droite.
     private static let folderChrome: CGFloat = 41 + 16 + 8 + 36
     private static let historyChrome: CGFloat = 24 + 36
+    /// Marge de sécurité : mesurer au pixel près laisse apparaître des « … » dès que le
+    /// rendu réel diffère d'un cheveu de la mesure.
+    private static let safety: CGFloat = 12
     /// Bornes de sécurité : un libellé vide ne doit pas produire une colonne ridicule,
     /// une adresse à rallonge ne doit pas manger la fenêtre.
     private static let bounds: ClosedRange<CGFloat> = 240...420
@@ -82,7 +85,7 @@ enum SidebarMetrics {
                 widest = max(widest, textWidth(folder.displayName, style: .body) + folderChrome)
             }
         }
-        return min(max(widest.rounded(.up), bounds.lowerBound), bounds.upperBound)
+        return min(max((widest + safety).rounded(.up), bounds.lowerBound), bounds.upperBound)
     }
 
     private static func textWidth(_ string: String, style: NSFont.TextStyle) -> CGFloat {
