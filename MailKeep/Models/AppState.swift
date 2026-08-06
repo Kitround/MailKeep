@@ -65,8 +65,23 @@ final class AppState: ObservableObject {
            let decoded = try? JSONDecoder().decode([BackupRun].self, from: data) {
             let knownIDs = Set(accounts.map(\.id))
             backupRuns = decoded.filter { knownIDs.contains($0.accountID) }
+            reconcileInterruptedRuns()
         }
         loadBackupBookmark()
+    }
+
+    /// Un run enregistré sans `finishedAt` appartient à une exécution que l'app n'a pas
+    /// terminée (fermeture, crash, coupure). Rien ne le reprend au lancement suivant :
+    /// il restait « En cours… » indéfiniment dans l'historique, avec un spinner sans fin.
+    /// On le clôt comme interrompu — le bouton « Reprendre » de la ligne devient actif.
+    private func reconcileInterruptedRuns() {
+        var changed = false
+        for i in backupRuns.indices where backupRuns[i].finishedAt == nil {
+            backupRuns[i].finishedAt = backupRuns[i].startedAt
+            backupRuns[i].errorMessage = "Interrompu — l'app s'est fermée pendant le backup."
+            changed = true
+        }
+        if changed { save() }
     }
 
     func clearHistory() {
