@@ -17,11 +17,41 @@ private struct SidebarWidthBounds: NSViewRepresentable {
     let minimum: CGFloat
     let maximum: CGFloat
 
+    /// Retient l'abonnement aux remaniements du split : SwiftUI remplace les
+    /// `NSSplitViewItem` quand la colonne du milieu change de contenu — ce qui arrive en
+    /// plein backup, quand la liste d'emails remplace l'historique. Les bornes posées sur
+    /// l'ancien item disparaissent avec lui, et `updateNSView` n'est pas rappelé puisque
+    /// nos valeurs n'ont pas bougé : la colonne redevenait librement redimensionnable et
+    /// repliable. On les repose donc à chaque redisposition.
+    final class Coordinator {
+        var observer: NSObjectProtocol?
+        var reapply: (() -> Void)?
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.reapply = { [weak nsView] in
+            guard let nsView else { return }
+            apply(from: nsView)
+        }
+        if coordinator.observer == nil {
+            coordinator.observer = NotificationCenter.default.addObserver(
+                forName: NSSplitView.didResizeSubviewsNotification,
+                object: nil, queue: .main
+            ) { [weak coordinator] _ in
+                coordinator?.reapply?()
+            }
+        }
         // Asynchrone : au moment de l'appel la vue n'est pas encore dans sa fenêtre.
-        DispatchQueue.main.async { apply(from: nsView) }
+        DispatchQueue.main.async { coordinator.reapply?() }
     }
 
     private func apply(from nsView: NSView) {
