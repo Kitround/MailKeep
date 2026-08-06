@@ -15,7 +15,22 @@ final class AppState: ObservableObject {
     private let runsKey = "mailkeep_runs"
     private let bookmarkKey = "mailkeep_backup_bookmark"
 
-    init() { load() }
+    init() {
+        Self.purgeSavedSplitViewFrames()
+        load()
+    }
+
+    /// Efface les positions de séparateur enregistrées par AppKit lors des sessions
+    /// précédentes. Elles sont restaurées après la mise en page SwiftUI et écrasaient la
+    /// largeur de la colonne latérale — une colonne réduite une fois le restait à chaque
+    /// réouverture. L'enregistrement lui-même est coupé côté vue.
+    private static func purgeSavedSplitViewFrames() {
+        let defaults = UserDefaults.standard
+        for key in defaults.dictionaryRepresentation().keys
+        where key.hasPrefix("NSSplitView Subview Frames") {
+            defaults.removeObject(forKey: key)
+        }
+    }
 
     var selectedAccount: IMAPAccount? {
         accounts.first { $0.id == selectedAccountID }

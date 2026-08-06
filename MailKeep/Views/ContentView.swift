@@ -1,4 +1,36 @@
 import SwiftUI
+import AppKit
+
+/// Coupe l'enregistrement automatique des positions de séparateur du split view.
+///
+/// AppKit sauvegarde ces positions dans les préférences (`NSSplitView Subview Frames …`) et
+/// les restaure à l'ouverture d'une fenêtre, **après** la mise en page SwiftUI : la largeur
+/// demandée était donc systématiquement écrasée par la dernière position enregistrée, d'où
+/// la colonne minuscule à chaque réouverture, quelle que soit la contrainte posée dans le
+/// code. Sans nom d'enregistrement, il n'y a plus rien à restaurer.
+///
+/// Assignation unique, sans effet sur la géométrie : contrairement aux bornes reposées en
+/// continu, elle ne relance pas la mise en page et ne lutte contre aucun geste.
+private struct SplitViewAutosaveDisabler: NSViewRepresentable {
+    final class Coordinator { var done = false }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard !context.coordinator.done else { return }
+        DispatchQueue.main.async {
+            var candidate: NSView? = nsView
+            while let view = candidate, !(view is NSSplitView) {
+                candidate = view.superview
+            }
+            guard let split = candidate as? NSSplitView else { return }
+            split.autosaveName = nil
+            context.coordinator.done = true
+        }
+    }
+}
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
@@ -19,6 +51,7 @@ struct ContentView: View {
             // Ici il n'y a rien à borner ni à reposer.
             SidebarView()
                 .navigationSplitViewColumnWidth(sidebarWidth)
+                .background(SplitViewAutosaveDisabler())
                 .toolbar(removing: .sidebarToggle)
         } content: {
             // Center panel: email list if mbox available, else backup history
