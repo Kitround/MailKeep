@@ -23,6 +23,10 @@ struct FolderRowView: View {
 
     var body: some View {
         HStack(alignment: .center) {
+            // Retrait par padding, et non par `listRowInsets` : les deux familles de lignes
+            // doivent avoir des insets rigoureusement identiques, sinon la surimpression de
+            // droite ne se cale pas sur la même verticale.
+            Color.clear.frame(width: 44, height: 0)
             Image(systemName: iconName)
                 .frame(width: 16)
                 .foregroundStyle(folder.isEnabled ? .primary : .tertiary)
@@ -64,7 +68,11 @@ struct FolderRowView: View {
         // compte. Posé depuis le parent, ce modificateur arrivait à un autre moment de la
         // chaîne : la surimpression se calait alors sur un cadre différent, d'où le
         // décalage résiduel entre roues crantées et « … ».
-        .listRowInsets(EdgeInsets(top: 3, leading: 41, bottom: 3, trailing: 0))
+        // Insets rigoureusement identiques à ceux des lignes de compte : c'est ce qui met
+        // les deux familles d'icônes sur la même verticale, la surimpression de droite se
+        // calant sur le bord droit de la ligne. Le retrait des dossiers est fait par le
+        // padding interne, pas ici.
+        .listRowInsets(EdgeInsets(top: 3, leading: -3, bottom: 3, trailing: 0))
         .listRowBackground(
             Rectangle().fill(
                 isSelected    ? Color.accentColor.opacity(0.2)
