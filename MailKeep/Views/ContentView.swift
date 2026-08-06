@@ -15,9 +15,9 @@ private struct SidebarWidthLock: NSViewRepresentable {
     let width: CGFloat
 
     final class Coordinator {
-        var observer: NSObjectProtocol?
+        var observers: [NSObjectProtocol] = []
         var reapply: (() -> Void)?
-        deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -35,11 +35,21 @@ private struct SidebarWidthLock: NSViewRepresentable {
         // posées sur l'ancien `NSSplitViewItem` disparaissent avec lui : on les repose.
         // Les deux bornes étant égales, il n'existe aucune plage de glissement, donc rien
         // à quoi ce code puisse s'opposer pendant que l'utilisateur tire le séparateur.
-        if coordinator.observer == nil {
-            coordinator.observer = NotificationCenter.default.addObserver(
-                forName: NSSplitView.didResizeSubviewsNotification, object: nil, queue: .main
-            ) { [weak coordinator] _ in
-                coordinator?.reapply?()
+        if coordinator.observers.isEmpty {
+            // `will` autant que `did` : après une reconstruction des colonnes — l'historique
+            // qui se met à jour, la liste d'emails qui prend le relais — le nouvel item
+            // repart avec des épaisseurs par défaut. Sans le `will`, le séparateur était
+            // saisissable pendant cette fenêtre de temps ; on repose les bornes avant que
+            // le déplacement ne soit calculé.
+            for name in [NSSplitView.willResizeSubviewsNotification,
+                         NSSplitView.didResizeSubviewsNotification] {
+                coordinator.observers.append(
+                    NotificationCenter.default.addObserver(
+                        forName: name, object: nil, queue: .main
+                    ) { [weak coordinator] _ in
+                        coordinator?.reapply?()
+                    }
+                )
             }
         }
         DispatchQueue.main.async { coordinator.reapply?() }

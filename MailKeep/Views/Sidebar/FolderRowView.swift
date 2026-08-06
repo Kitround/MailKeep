@@ -60,6 +60,11 @@ struct FolderRowView: View {
             .opacity(isHovered || iconHovered ? 1 : 0.5)
             .help("Actions du dossier")
         }
+        // Appliqué ici, juste après la surimpression, exactement comme sur les lignes de
+        // compte. Posé depuis le parent, ce modificateur arrivait à un autre moment de la
+        // chaîne : la surimpression se calait alors sur un cadre différent, d'où le
+        // décalage résiduel entre roues crantées et « … ».
+        .listRowInsets(EdgeInsets(top: 3, leading: 41, bottom: 3, trailing: 0))
         .listRowBackground(
             Rectangle().fill(
                 isSelected    ? Color.accentColor.opacity(0.2)
