@@ -22,7 +22,7 @@ struct FolderRowView: View {
     @State private var showDeleteConfirm = false
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SidebarIcon.gap) {
             HStack(alignment: .center) {
                 Image(systemName: iconName)
                     .frame(width: 16)
@@ -31,42 +31,41 @@ struct FolderRowView: View {
                     .foregroundStyle(folder.isEnabled ? .primary : .secondary)
                     // Jamais de « … » : le texte garde sa largeur, quoi qu'il arrive à la colonne.
                     .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: SidebarIcon.gap)
-                // Emplacement d'état réservé en permanence : sans lui, l'apparition du
-                // loader pousse le reste de la ligne et casse l'alignement des icônes.
-                Group {
-                    if isRunning {
-                        ProgressView().controlSize(.mini)
-                    } else if !folder.isEnabled {
-                        Image(systemName: "pause.circle")
-                            .foregroundStyle(.tertiary)
-                            .font(.caption)
-                    }
-                }
-                .frame(width: SidebarIcon.status)
+                Spacer(minLength: 0)
             }
             // Sans ça, la ligne se dimensionne sur son texte (`fixedSize`) : le `Spacer`
-            // n'a plus rien à repousser et l'icône d'action suit la longueur du nom,
-            // au lieu de rester sur une colonne verticale.
+            // n'a plus rien à repousser et les blocs de droite suivent la longueur du nom,
+            // au lieu de rester sur leurs verticales.
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
             .onTapGesture { select() }
 
-            // Actions du dossier — mêmes entrées que la page de détail,
-            // accessibles même quand un email est ouvert.
-            // Bouton strictement identique à la roue crantée du compte (même label,
-            // même padding) : alignement et couleurs par construction. Un Menu SwiftUI
-            // ne convenait pas — son chrome décale le glyphe et le noircit en dark mode.
-            Button {
-                NSMenu.popUpAtPointer(items: actionItems)
-            } label: {
-                SidebarIconLabel(systemName: "ellipsis.circle", isHovered: iconHovered)
+            SidebarRowTrailing {
+                if isRunning {
+                    ProgressView().controlSize(.mini)
+                } else if !folder.isEnabled {
+                    Image(systemName: "pause.circle")
+                        .foregroundStyle(.tertiary)
+                        .font(.caption)
+                } else {
+                    // Vue concrète et non un `EmptyView`, qui ne réserverait aucune place.
+                    Color.clear
+                }
+            } action: {
+                // Actions du dossier — mêmes entrées que la page de détail, accessibles
+                // même quand un email est ouvert. Bouton strictement identique à la roue
+                // crantée du compte. Un Menu SwiftUI ne convenait pas : son chrome décale
+                // le glyphe et le noircit en dark mode.
+                Button {
+                    NSMenu.popUpAtPointer(items: actionItems)
+                } label: {
+                    SidebarIconLabel(systemName: "ellipsis.circle", isHovered: iconHovered)
+                }
+                .buttonStyle(.plain)
+                .onHover { iconHovered = $0 }
+                .opacity(isHovered || iconHovered ? 1 : 0.5)
+                .help("Actions du dossier")
             }
-            .buttonStyle(.plain)
-            .onHover { iconHovered = $0 }
-            .opacity(isHovered || iconHovered ? 1 : 0.5)
-            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.pad)
-            .help("Actions du dossier")
         }
         .listRowBackground(
             Rectangle().fill(

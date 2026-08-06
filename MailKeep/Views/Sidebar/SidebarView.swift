@@ -139,6 +139,23 @@ struct SidebarIconLabel: View {
     }
 }
 
+/// Zone de droite d'une ligne de sidebar : un bloc d'état puis un bloc d'action, tailles
+/// fixes, centrés verticalement, collés au bord droit. Partagée par les lignes de compte et
+/// de dossier — c'est ce qui met loaders et icônes sur les mêmes verticales, que le bloc
+/// d'état soit occupé ou vide.
+struct SidebarRowTrailing<Status: View, Action: View>: View {
+    @ViewBuilder let status: Status
+    @ViewBuilder let action: Action
+
+    var body: some View {
+        HStack(spacing: SidebarIcon.gap) {
+            status.frame(width: SidebarIcon.status, height: SidebarIcon.status)
+            action.frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
+        }
+        .padding(.trailing, SidebarIcon.trailing)
+    }
+}
+
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var backupEngine: BackupEngine

@@ -46,24 +46,22 @@ struct AccountRowView: View {
             .contentShape(Rectangle())
             .onTapGesture { isExpanded.toggle() }
 
-            // Emplacement d'état réservé en permanence, comme sur les lignes de dossier :
-            // la roue crantée reste alignée avec les « … » que le compte tourne ou non.
-            Group {
+            SidebarRowTrailing {
                 if !isExpanded && isBacking {
                     ProgressView().controlSize(.small)
+                } else {
+                    // Vue concrète et non un `EmptyView`, qui ne réserverait aucune place.
+                    Color.clear
                 }
+            } action: {
+                Button(action: onEdit) {
+                    SidebarIconLabel(systemName: "gearshape", isHovered: gearHovered)
+                }
+                .buttonStyle(.plain)
+                .onHover { gearHovered = $0 }
+                .help("Réglages du compte")
+                .opacity(isHovered || gearHovered ? 1 : 0.5)
             }
-            .frame(width: SidebarIcon.status)
-
-            // Per-account settings — vertically centered against the name + email lines.
-            Button(action: onEdit) {
-                SidebarIconLabel(systemName: "gearshape", isHovered: gearHovered)
-            }
-            .buttonStyle(.plain)
-            .onHover { gearHovered = $0 }
-            .help("Réglages du compte")
-            .opacity(isHovered || gearHovered ? 1 : 0.5)
-            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.pad)
         }
         .listRowInsets(EdgeInsets(top: 20, leading: -3, bottom: 6, trailing: 0))
         .listRowBackground(
