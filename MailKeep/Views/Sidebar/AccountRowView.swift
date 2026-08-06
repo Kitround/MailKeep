@@ -15,37 +15,32 @@ struct AccountRowView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(width: 16)
+                    Text(account.label.isEmpty ? account.host : account.label)
+                        .font(.headline)
+                    Spacer()
+                }
+                Text(account.username)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .frame(width: 16)
-                Text(account.label.isEmpty ? account.host : account.label)
-                    .font(.headline)
-                    // Jamais de « … » : le texte garde sa largeur, quoi qu'il arrive à la colonne.
-                    .fixedSize(horizontal: true, vertical: false)
-                Spacer()
+                    .padding(.leading, 22)
+                scheduleIndicator
+                    .padding(.leading, 22)
             }
-            Text(account.username)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.leading, 22)
-            scheduleIndicator
-                .padding(.leading, 22)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { isExpanded.toggle() }
-        .sidebarRowTrailing {
+            .contentShape(Rectangle())
+            .onTapGesture { isExpanded.toggle() }
+
+            // Per-account settings — vertically centered against the name + email lines.
             if !isExpanded && isBacking {
                 ProgressView().controlSize(.small)
-            } else {
-                // Vue concrète et non un `EmptyView`, qui ne réserverait aucune place.
-                Color.clear
             }
-        } action: {
             Button(action: onEdit) {
                 SidebarIconLabel(systemName: "gearshape", isHovered: gearHovered)
             }
@@ -53,6 +48,7 @@ struct AccountRowView: View {
             .onHover { gearHovered = $0 }
             .help("Réglages du compte")
             .opacity(isHovered || gearHovered ? 1 : 0.5)
+            .padding(.trailing, SidebarIcon.trailing - SidebarIcon.pad)
         }
         .listRowInsets(EdgeInsets(top: 20, leading: -3, bottom: 6, trailing: 0))
         .listRowBackground(

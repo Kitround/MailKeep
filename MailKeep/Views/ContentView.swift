@@ -1,110 +1,16 @@
 import SwiftUI
-import AppKit
-
-/// Coupe l'enregistrement automatique des positions de séparateur du split view.
-///
-/// AppKit sauvegarde ces positions dans les préférences (`NSSplitView Subview Frames …`) et
-/// les restaure à l'ouverture d'une fenêtre, **après** la mise en page SwiftUI : la largeur
-/// demandée était donc systématiquement écrasée par la dernière position enregistrée, d'où
-/// la colonne minuscule à chaque réouverture, quelle que soit la contrainte posée dans le
-/// code. Sans nom d'enregistrement, il n'y a plus rien à restaurer.
-///
-/// Assignation unique, sans effet sur la géométrie : contrairement aux bornes reposées en
-/// continu, elle ne relance pas la mise en page et ne lutte contre aucun geste.
-private struct SidebarWidthLock: NSViewRepresentable {
-    let width: CGFloat
-
-    final class Coordinator {
-        var observers: [NSObjectProtocol] = []
-        var reapply: (() -> Void)?
-        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        let coordinator = context.coordinator
-        coordinator.reapply = { [weak nsView] in
-            guard let nsView else { return }
-            apply(from: nsView)
-        }
-        // SwiftUI reconstruit ses colonnes quand la colonne du milieu change de contenu —
-        // en plein backup, quand la liste d'emails remplace l'historique. Les épaisseurs
-        // posées sur l'ancien `NSSplitViewItem` disparaissent avec lui : on les repose.
-        // Les deux bornes étant égales, il n'existe aucune plage de glissement, donc rien
-        // à quoi ce code puisse s'opposer pendant que l'utilisateur tire le séparateur.
-        if coordinator.observers.isEmpty {
-            // Uniquement `did`, et de façon différée. Reposer les bornes sur
-            // `willResizeSubviews` revenait à modifier les épaisseurs pendant la passe de
-            // redimensionnement d'AppKit : il recalculait au milieu de son propre travail
-            // et la colonne s'effondrait en pleine sauvegarde. On attend donc que la passe
-            // soit terminée avant d'écrire quoi que ce soit.
-            for name in [NSSplitView.didResizeSubviewsNotification,
-                         NSView.frameDidChangeNotification] {
-                coordinator.observers.append(
-                    NotificationCenter.default.addObserver(
-                        forName: name, object: nil, queue: .main
-                    ) { [weak coordinator] _ in
-                        DispatchQueue.main.async { coordinator?.reapply?() }
-                    }
-                )
-            }
-        }
-        DispatchQueue.main.async { coordinator.reapply?() }
-    }
-
-    private func apply(from nsView: NSView) {
-        var candidate: NSView? = nsView
-        while let view = candidate, !(view.superview is NSSplitView) {
-            candidate = view.superview
-        }
-        guard let column = candidate,
-              let splitView = column.superview as? NSSplitView,
-              let controller = splitView.delegate as? NSSplitViewController,
-              let index = splitView.arrangedSubviews.firstIndex(of: column),
-              controller.splitViewItems.indices.contains(index) else { return }
-
-        // Signal direct « la colonne a changé de largeur derrière notre dos ». Les autres
-        // déclencheurs ne couvrent pas la reconstruction déclenchée par une mise à jour des
-        // comptes : le nouvel item repart avec les épaisseurs par défaut, la largeur passée
-        // au verrou n'a pas changé, donc SwiftUI ne rappelle rien et la colonne se tronque.
-        column.postsFrameChangedNotifications = true
-
-        // Épaisseurs identiques : la colonne ne peut ni être tirée, ni être écrasée par une
-        // géométrie restaurée. Écritures idempotentes, pour ne pas relancer la mise en page.
-        let item = controller.splitViewItems[index]
-        if item.minimumThickness != width { item.minimumThickness = width }
-        if item.maximumThickness != width { item.maximumThickness = width }
-        if item.canCollapse { item.canCollapse = false }
-        splitView.autosaveName = nil
-        splitView.window?.isRestorable = false
-    }
-}
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var backupEngine: BackupEngine
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
-    /// Largeur de la colonne des comptes : celle de son contenu, marge comprise.
-    private var sidebarWidth: CGFloat { SidebarMetrics.width(for: appState.accounts) }
-
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            // Largeur fixe, en une seule valeur : la colonne n'est pas redimensionnable.
-            // Les variantes bornées (`min:ideal:max:`) n'ont jamais tenu — les bornes
-            // SwiftUI ne valent qu'à la première mise en page, et celles posées sur le
-            // `NSSplitViewItem` disparaissaient dès que SwiftUI reconstruisait ses colonnes,
-            // ce qui arrive en plein backup quand la liste d'emails remplace l'historique.
-            // Les reposer en continu revenait à lutter contre le glissé : d'où les sauts.
-            // Ici il n'y a rien à borner ni à reposer.
             SidebarView()
-                .navigationSplitViewColumnWidth(sidebarWidth)
-                // Seul mécanisme qui impose réellement la largeur : mesuré, la colonne
-                // faisait 272 pt de contenu pour une colonne rendue bien plus étroite.
-                .background(SidebarWidthLock(width: sidebarWidth))
+                // min sert de largeur au premier lancement : SwiftUI n'applique pas
+                // `ideal` tant qu'aucun état de split n'a été restauré.
+                .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 360)
                 .toolbar(removing: .sidebarToggle)
         } content: {
             // Center panel: email list if mbox available, else backup history
@@ -134,7 +40,7 @@ struct ContentView: View {
         .onChange(of: appState.selectedFolderID) { _, _ in
             appState.selectedEmail = nil
         }
-        // Empêche une colonne d'être réduite via raccourci clavier ou menu Présentation
+        // Empêche la sidebar d'être réduite via raccourci clavier ou menu View
         .onChange(of: columnVisibility) { _, v in
             if v != .all { columnVisibility = .all }
         }

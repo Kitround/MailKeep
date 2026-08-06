@@ -57,72 +57,19 @@ private final class ClosureMenuItem: NSMenuItem {
     @objc private func fire() { handler() }
 }
 
-/// Largeur de la colonne latérale, mesurée sur ce qu'elle contient.
-///
-/// Une `List` n'a pas de largeur intrinsèque : elle remplit ce qu'on lui donne. On mesure
-/// donc les textes réellement affichés — libellés de comptes, adresses, noms de dossiers —
-/// et on ajoute le décor de chaque ligne (chevron, retrait, icône, bouton d'action, marge).
-enum SidebarMetrics {
-    /// Zone de droite commune à toutes les lignes : écart après le texte, emplacement
-    /// d'état réservé au loader, espacement, icône d'action, marge droite.
-    private static let trailingZone: CGFloat =
-        SidebarIcon.gap + SidebarIcon.status + 4 + 28 + SidebarIcon.trailing
-    /// Décor d'une ligne de compte : chevron + marge, puis la zone de droite.
-    private static let accountChrome: CGFloat = 22 + trailingZone
-    /// Décor d'une ligne de dossier : retrait + icône + espacement, puis la zone de droite.
-    private static let folderChrome: CGFloat = 41 + 16 + 8 + trailingZone
-    private static let historyChrome: CGFloat = 24 + trailingZone
-    /// Marge après l'élément le plus long. Mesurer au pixel près laisse apparaître des
-    /// « … » dès que le rendu réel diffère d'un cheveu du calcul, et surtout la colonne
-    /// s'ouvre alors exactement à sa largeur limite : le moindre rétrécissement casse
-    /// l'alignement. On laisse donc de l'air.
-    private static let safety: CGFloat = 24
-    /// Bornes de sécurité : un libellé vide ne doit pas produire une colonne ridicule,
-    /// une adresse à rallonge ne doit pas manger la fenêtre.
-    private static let bounds: ClosedRange<CGFloat> = 240...420
-
-    static func width(for accounts: [IMAPAccount]) -> CGFloat {
-        var widest = textWidth("Historique", style: .body) + historyChrome
-        for account in accounts {
-            let label = account.label.isEmpty ? account.host : account.label
-            widest = max(widest, textWidth(label, style: .headline) + accountChrome)
-            widest = max(widest, textWidth(account.username, style: .caption1) + 22 + 36)
-            for folder in account.folders {
-                widest = max(widest, textWidth(folder.displayName, style: .body) + folderChrome)
-            }
-        }
-        return min(max((widest + safety).rounded(.up), bounds.lowerBound), bounds.upperBound)
-    }
-
-    private static func textWidth(_ string: String, style: NSFont.TextStyle) -> CGFloat {
-        let font = NSFont.preferredFont(forTextStyle: style)
-        return (string as NSString).size(withAttributes: [.font: font]).width
-    }
-}
-
 /// Métriques partagées des icônes d'action de la sidebar (roue crantée des
 /// comptes, menu « … » des dossiers), pour que les deux colonnes s'alignent.
 enum SidebarIcon {
     /// 16 = taille de `.body` (13) + 3, calée à l'œil.
     static let font = Font.system(size: 16)
-    /// Marge droite du glyphe, identique pour les deux icônes. Mesurée depuis le bord de
-    /// la colonne : en dessous, les icônes touchent le séparateur.
-    static let trailing: CGFloat = 12
-    /// Emplacement réservé au loader / à l'indicateur de pause, à gauche de l'icône
-    /// d'action. Toujours occupé, même vide, pour que rien ne bouge quand il s'affiche.
-    static let status: CGFloat = 16
-    /// Écart minimal entre le texte et l'emplacement d'état. Sans lui, sur la ligne la
-    /// plus longue le loader vient se coller au libellé.
-    static let gap: CGFloat = 12
+    /// Marge droite du glyphe, identique pour les deux icônes.
+    static let trailing: CGFloat = 8
     /// Marge cliquable autour du glyphe : 16 + 2×6 = zone de 28.
     static let pad: CGFloat = 6
     /// Zone cliquable, et surtout boîte carrée commune : `gearshape` et
     /// `ellipsis.circle` n'ont pas la même largeur intrinsèque, sans cadre imposé
     /// leurs centres ne tombent pas au même endroit.
     static var hit: CGFloat { 16 + 2 * pad }
-    /// Largeur totale de la zone de droite : bloc d'état, écart, bloc d'action, marge.
-    /// Réservée par un padding sur le contenu, puisque la zone est posée en surimpression.
-    static var trailingZone: CGFloat { status + gap + hit + trailing }
 }
 
 /// Glyphe d'action de la sidebar : taille, couleurs et zone cliquable élargie par
@@ -139,32 +86,6 @@ struct SidebarIconLabel: View {
             .foregroundStyle(isHovered ? .primary : .secondary)
             .frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
             .contentShape(Rectangle())
-    }
-}
-
-/// Pose la zone de droite d'une ligne de sidebar : un bloc d'état puis un bloc d'action,
-/// tailles fixes, centrés verticalement.
-///
-/// En surimpression et non dans le flux : la position ne dépend alors que du bord droit de
-/// la ligne, identique pour tout le monde. Dans le flux, elle dépendait de la composition
-/// interne — VStack de trois lignes côté compte, HStack simple côté dossier, `Spacer` et
-/// textes en `fixedSize` — et les deux familles d'icônes ne tombaient pas sur la même
-/// verticale. Le contenu réserve la place par un padding de `SidebarIcon.trailingZone`.
-extension View {
-    func sidebarRowTrailing<Status: View, Action: View>(
-        @ViewBuilder status: () -> Status,
-        @ViewBuilder action: () -> Action
-    ) -> some View {
-        self
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.trailing, SidebarIcon.trailingZone)
-            .overlay(alignment: .trailing) {
-                HStack(spacing: SidebarIcon.gap) {
-                    status().frame(width: SidebarIcon.status, height: SidebarIcon.status)
-                    action().frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
-                }
-                .padding(.trailing, SidebarIcon.trailing)
-            }
     }
 }
 
@@ -315,6 +236,9 @@ private struct AccountSectionView: View {
             ForEach(account.folders) { folder in
                 FolderRowView(account: account, folder: folder)
                     .id(folder.id)
+                    // trailing 0 : le menu « … » porte lui-même son padding de 8,
+                    // comme la roue crantée du compte, pour que les deux s'alignent.
+                    .listRowInsets(EdgeInsets(top: 3, leading: 41, bottom: 3, trailing: 0))
             }
         }
     }
