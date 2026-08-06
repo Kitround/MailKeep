@@ -57,6 +57,40 @@ private final class ClosureMenuItem: NSMenuItem {
     @objc private func fire() { handler() }
 }
 
+/// Largeur de la colonne latérale, mesurée sur ce qu'elle contient.
+///
+/// Une `List` n'a pas de largeur intrinsèque : elle remplit ce qu'on lui donne. On mesure
+/// donc les textes réellement affichés — libellés de comptes, adresses, noms de dossiers —
+/// et on ajoute le décor de chaque ligne (chevron, retrait, icône, bouton d'action, marge).
+enum SidebarMetrics {
+    /// Décor d'une ligne de compte : chevron + marge, puis roue crantée + marge droite.
+    private static let accountChrome: CGFloat = 22 + 36
+    /// Décor d'une ligne de dossier : retrait + icône + espacement, puis menu + marge droite.
+    private static let folderChrome: CGFloat = 41 + 16 + 8 + 36
+    private static let historyChrome: CGFloat = 24 + 36
+    /// Bornes de sécurité : un libellé vide ne doit pas produire une colonne ridicule,
+    /// une adresse à rallonge ne doit pas manger la fenêtre.
+    private static let bounds: ClosedRange<CGFloat> = 240...420
+
+    static func width(for accounts: [IMAPAccount]) -> CGFloat {
+        var widest = textWidth("Historique", style: .body) + historyChrome
+        for account in accounts {
+            let label = account.label.isEmpty ? account.host : account.label
+            widest = max(widest, textWidth(label, style: .headline) + accountChrome)
+            widest = max(widest, textWidth(account.username, style: .caption1) + 22 + 36)
+            for folder in account.folders {
+                widest = max(widest, textWidth(folder.displayName, style: .body) + folderChrome)
+            }
+        }
+        return min(max(widest.rounded(.up), bounds.lowerBound), bounds.upperBound)
+    }
+
+    private static func textWidth(_ string: String, style: NSFont.TextStyle) -> CGFloat {
+        let font = NSFont.preferredFont(forTextStyle: style)
+        return (string as NSString).size(withAttributes: [.font: font]).width
+    }
+}
+
 /// Métriques partagées des icônes d'action de la sidebar (roue crantée des
 /// comptes, menu « … » des dossiers), pour que les deux colonnes s'alignent.
 enum SidebarIcon {
