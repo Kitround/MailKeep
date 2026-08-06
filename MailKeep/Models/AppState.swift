@@ -15,34 +15,7 @@ final class AppState: ObservableObject {
     private let runsKey = "mailkeep_runs"
     private let bookmarkKey = "mailkeep_backup_bookmark"
 
-    init() {
-        Self.purgeRestoredWindowGeometry()
-        load()
-    }
-
-    /// Efface les deux formes de géométrie de fenêtre que macOS rejoue au lancement, chacune
-    /// après la mise en page SwiftUI, donc chacune capable d'écraser la largeur demandée
-    /// pour la colonne latérale — une colonne réduite une fois revenait réduite à chaque
-    /// ouverture, quelle que soit la contrainte posée dans les vues.
-    ///
-    /// 1. les positions de séparateur dans les préférences (`NSSplitView Subview Frames …`) ;
-    /// 2. l'état d'application sauvegardé, qui contient sa propre copie de la géométrie.
-    ///
-    /// L'enregistrement lui-même est coupé côté vue (`autosaveName`, `isRestorable`).
-    private static func purgeRestoredWindowGeometry() {
-        let defaults = UserDefaults.standard
-        for key in defaults.dictionaryRepresentation().keys
-        where key.hasPrefix("NSSplitView Subview Frames") {
-            defaults.removeObject(forKey: key)
-        }
-
-        guard let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first,
-              let bundleID = Bundle.main.bundleIdentifier else { return }
-        let savedState = library
-            .appendingPathComponent("Saved Application State", isDirectory: true)
-            .appendingPathComponent("\(bundleID).savedState", isDirectory: true)
-        try? FileManager.default.removeItem(at: savedState)
-    }
+    init() { load() }
 
     var selectedAccount: IMAPAccount? {
         accounts.first { $0.id == selectedAccountID }
