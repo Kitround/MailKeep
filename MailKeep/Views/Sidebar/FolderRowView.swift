@@ -45,6 +45,10 @@ struct FolderRowView: View {
                 }
                 .frame(width: SidebarIcon.status)
             }
+            // Sans ça, la ligne se dimensionne sur son texte (`fixedSize`) : le `Spacer`
+            // n'a plus rien à repousser et l'icône d'action suit la longueur du nom,
+            // au lieu de rester sur une colonne verticale.
+            .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
             .onTapGesture { select() }
 

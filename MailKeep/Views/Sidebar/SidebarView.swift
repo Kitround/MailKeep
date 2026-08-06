@@ -71,9 +71,11 @@ enum SidebarMetrics {
     /// Décor d'une ligne de dossier : retrait + icône + espacement, puis la zone de droite.
     private static let folderChrome: CGFloat = 41 + 16 + 8 + trailingZone
     private static let historyChrome: CGFloat = 24 + trailingZone
-    /// Marge de sécurité : mesurer au pixel près laisse apparaître des « … » dès que le
-    /// rendu réel diffère d'un cheveu de la mesure.
-    private static let safety: CGFloat = 12
+    /// Marge après l'élément le plus long. Mesurer au pixel près laisse apparaître des
+    /// « … » dès que le rendu réel diffère d'un cheveu du calcul, et surtout la colonne
+    /// s'ouvre alors exactement à sa largeur limite : le moindre rétrécissement casse
+    /// l'alignement. On laisse donc de l'air.
+    private static let safety: CGFloat = 24
     /// Bornes de sécurité : un libellé vide ne doit pas produire une colonne ridicule,
     /// une adresse à rallonge ne doit pas manger la fenêtre.
     private static let bounds: ClosedRange<CGFloat> = 240...420

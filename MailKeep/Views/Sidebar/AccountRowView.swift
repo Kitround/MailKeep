@@ -37,6 +37,10 @@ struct AccountRowView: View {
                 scheduleIndicator
                     .padding(.leading, 22)
             }
+            // Même raison que sur les lignes de dossier : avec des textes en `fixedSize`,
+            // sans largeur imposée la ligne se réduit à son contenu et la roue crantée
+            // vient se coller au texte au lieu de rester sur sa colonne.
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture { isExpanded.toggle() }
 
