@@ -1,22 +1,53 @@
 import SwiftUI
+import AppKit
+
+/// Épingle la colonne latérale à une largeur fixe, côté AppKit.
+///
+/// SwiftUI laisse le séparateur déplaçable même avec une largeur de colonne fixe, et ni
+/// `navigationSplitViewColumnWidth` ni un `frame` sur le contenu ne le bornent réellement :
+/// la colonne se comprimait à la réouverture de la fenêtre et débordait quand on tirait le
+/// séparateur. Seul le `NSSplitViewItem` sous-jacent tranche — épaisseurs minimale et
+/// maximale égales, et pas de repli possible.
+private struct SidebarWidthLock: NSViewRepresentable {
+    let width: CGFloat
+
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // Asynchrone : au moment de l'appel la vue n'est pas encore dans une fenêtre.
+        DispatchQueue.main.async {
+            guard let root = nsView.window?.contentViewController,
+                  let split = Self.firstSplitViewController(in: root),
+                  let sidebar = split.splitViewItems.first else { return }
+            sidebar.canCollapse = false
+            sidebar.minimumThickness = width
+            sidebar.maximumThickness = width
+        }
+    }
+
+    private static func firstSplitViewController(in controller: NSViewController) -> NSSplitViewController? {
+        if let split = controller as? NSSplitViewController { return split }
+        for child in controller.children {
+            if let found = firstSplitViewController(in: child) { return found }
+        }
+        return nil
+    }
+}
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var backupEngine: BackupEngine
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
+    private static let sidebarWidth: CGFloat = 290
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
-                // Largeur fixe, assumée. La variante redimensionnable
-                // (`navigationSplitViewColumnWidth(min:ideal:max:)`) n'a tenu ni sa borne
-                // basse ni sa borne haute : à la réouverture de la fenêtre la colonne se
-                // comprimait sous le minimum (noms tronqués, icônes à la ligne), et tirée
-                // à la main elle dépassait le maximum jusqu'à avaler la fenêtre — le
-                // `frame` du contenu ne borne pas le séparateur. Une largeur unique ne
-                // peut casser dans aucun des deux sens.
-                .frame(width: 290)
-                .navigationSplitViewColumnWidth(290)
+                .frame(width: Self.sidebarWidth)
+                .navigationSplitViewColumnWidth(Self.sidebarWidth)
+                // Verrou AppKit : sans lui le séparateur reste déplaçable.
+                .background(SidebarWidthLock(width: Self.sidebarWidth))
                 .toolbar(removing: .sidebarToggle)
         } content: {
             // Center panel: email list if mbox available, else backup history
