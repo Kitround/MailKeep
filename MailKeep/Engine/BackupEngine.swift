@@ -17,13 +17,11 @@ final class BackupEngine: ObservableObject {
 
     /// Écrit la progression dans `AppState` — au plus 5 fois par seconde.
     ///
-    /// `activeProgress` est `@Published` : chaque écriture invalide tout ce qui observe
-    /// `AppState`, **y compris la barre de menus et le MenuBarExtra**. Écrite à chaque
-    /// message (des dizaines par seconde), elle poussait la mise à jour de menu de macOS,
-    /// synchrone et ré-entrante, à se rappeler elle-même sans fin :
+    /// `activeProgress` est `@Published` : chaque écriture invalide tout ce qui l'observe.
+    /// Écrite à chaque message (des dizaines par seconde), elle poussait la mise à jour de
+    /// menu de macOS, synchrone et ré-entrante, à se rappeler elle-même sans fin :
     /// `menuNeedsUpdate → render → menuNeedsUpdate → …` jusqu'au débordement de pile
-    /// (SIGSEGV sur la stack guard). Se produisait surtout fenêtre réduite, le rendu
-    /// n'étant alors plus cadencé par l'affichage.
+    /// (SIGSEGV sur la stack guard).
     ///
     /// `force` pour les transitions de phase et les états terminaux, qui doivent
     /// s'afficher immédiatement.
@@ -363,7 +361,7 @@ final class BackupEngine: ObservableObject {
     }
 
     private func performImport(urls: [URL], folder: MailFolder, account: IMAPAccount, baseURL: URL) async {
-        guard let state = appState else { return }
+        guard appState != nil else { return }
 
         var progress = BackupProgress(
             accountID: account.id,
@@ -435,7 +433,7 @@ final class BackupEngine: ObservableObject {
     // MARK: - Restore
 
     func restoreFolder(from mboxURL: URL, to folder: MailFolder, on account: IMAPAccount) async {
-        guard let state = appState else { return }
+        guard appState != nil else { return }
 
         var progress = BackupProgress(
             accountID: account.id,
@@ -503,7 +501,7 @@ final class BackupEngine: ObservableObject {
     }
 
     func restoreMessage(_ email: EmailMessage, to folder: MailFolder, on account: IMAPAccount) async {
-        guard let state = appState else { return }
+        guard appState != nil else { return }
 
         var progress = BackupProgress(
             accountID: account.id,

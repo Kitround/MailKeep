@@ -42,12 +42,6 @@ struct MailKeepApp: App {
             }
         }
 
-        MenuBarExtra("MailKeep", systemImage: "tray.and.arrow.down") {
-            MenuBarView()
-                .environmentObject(appState)
-                .environmentObject(backupEngine)
-        }
-
         Settings {
             AppSettingsView()
                 .environmentObject(appState)
