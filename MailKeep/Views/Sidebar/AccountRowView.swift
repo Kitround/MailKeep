@@ -25,11 +25,14 @@ struct AccountRowView: View {
                         .frame(width: 16)
                     Text(account.label.isEmpty ? account.host : account.label)
                         .font(.headline)
+                        // Jamais de « … » : le texte garde sa largeur, quoi qu'il arrive à la colonne.
+                        .fixedSize(horizontal: true, vertical: false)
                     Spacer()
                 }
                 Text(account.username)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.leading, 22)
                 scheduleIndicator
                     .padding(.leading, 22)

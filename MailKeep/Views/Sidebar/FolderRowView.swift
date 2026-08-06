@@ -29,6 +29,8 @@ struct FolderRowView: View {
                     .foregroundStyle(folder.isEnabled ? .primary : .tertiary)
                 Text(folder.displayName)
                     .foregroundStyle(folder.isEnabled ? .primary : .secondary)
+                    // Jamais de « … » : le texte garde sa largeur, quoi qu'il arrive à la colonne.
+                    .fixedSize(horizontal: true, vertical: false)
                 Spacer()
                 if isRunning {
                     ProgressView().controlSize(.mini)

@@ -16,21 +16,26 @@ private struct SidebarWidthBounds: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         // Asynchrone : au moment de l'appel la vue n'est pas encore dans une fenêtre.
         DispatchQueue.main.async {
-            guard let root = nsView.window?.contentViewController,
-                  let split = Self.firstSplitViewController(in: root),
-                  let sidebar = split.splitViewItems.first else { return }
-            sidebar.canCollapse = false
-            sidebar.minimumThickness = minimum
-            sidebar.maximumThickness = maximum
-        }
-    }
+            // On remonte depuis notre propre vue jusqu'à la colonne du split, plutôt que de
+            // deviner « la première colonne » depuis le contrôleur racine : c'est notre
+            // colonne à coup sûr, et ça résiste au fait que SwiftUI change sa hiérarchie.
+            var candidate: NSView? = nsView
+            while let view = candidate, !(view.superview is NSSplitView) {
+                candidate = view.superview
+            }
+            guard let column = candidate,
+                  let splitView = column.superview as? NSSplitView,
+                  let index = splitView.arrangedSubviews.firstIndex(of: column) else { return }
 
-    private static func firstSplitViewController(in controller: NSViewController) -> NSSplitViewController? {
-        if let split = controller as? NSSplitViewController { return split }
-        for child in controller.children {
-            if let found = firstSplitViewController(in: child) { return found }
+            splitView.setHoldingPriority(.defaultHigh + 1, forSubviewAt: index)
+
+            guard let controller = splitView.delegate as? NSSplitViewController,
+                  controller.splitViewItems.indices.contains(index) else { return }
+            let item = controller.splitViewItems[index]
+            item.canCollapse = false
+            item.minimumThickness = minimum
+            item.maximumThickness = maximum
         }
-        return nil
     }
 }
 
