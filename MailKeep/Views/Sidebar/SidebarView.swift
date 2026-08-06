@@ -63,9 +63,10 @@ private final class ClosureMenuItem: NSMenuItem {
 /// donc les textes réellement affichés — libellés de comptes, adresses, noms de dossiers —
 /// et on ajoute le décor de chaque ligne (chevron, retrait, icône, bouton d'action, marge).
 enum SidebarMetrics {
-    /// Zone de droite commune à toutes les lignes : emplacement d'état réservé au loader,
-    /// espacement, icône d'action, marge droite.
-    private static let trailingZone: CGFloat = SidebarIcon.status + 4 + 28 + SidebarIcon.trailing
+    /// Zone de droite commune à toutes les lignes : écart après le texte, emplacement
+    /// d'état réservé au loader, espacement, icône d'action, marge droite.
+    private static let trailingZone: CGFloat =
+        SidebarIcon.gap + SidebarIcon.status + 4 + 28 + SidebarIcon.trailing
     /// Décor d'une ligne de compte : chevron + marge, puis la zone de droite.
     private static let accountChrome: CGFloat = 22 + trailingZone
     /// Décor d'une ligne de dossier : retrait + icône + espacement, puis la zone de droite.
@@ -110,6 +111,9 @@ enum SidebarIcon {
     /// Emplacement réservé au loader / à l'indicateur de pause, à gauche de l'icône
     /// d'action. Toujours occupé, même vide, pour que rien ne bouge quand il s'affiche.
     static let status: CGFloat = 16
+    /// Écart minimal entre le texte et l'emplacement d'état. Sans lui, sur la ligne la
+    /// plus longue le loader vient se coller au libellé.
+    static let gap: CGFloat = 12
     /// Marge cliquable autour du glyphe : 16 + 2×6 = zone de 28.
     static let pad: CGFloat = 6
     /// Zone cliquable, et surtout boîte carrée commune : `gearshape` et

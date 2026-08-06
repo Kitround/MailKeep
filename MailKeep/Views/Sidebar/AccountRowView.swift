@@ -15,7 +15,9 @@ struct AccountRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        // Même écart que sur les lignes de dossier, pour que loaders et icônes d'action
+        // tombent exactement sur les mêmes verticales d'une ligne à l'autre.
+        HStack(spacing: SidebarIcon.gap) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right")

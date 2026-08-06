@@ -31,7 +31,7 @@ struct FolderRowView: View {
                     .foregroundStyle(folder.isEnabled ? .primary : .secondary)
                     // Jamais de « … » : le texte garde sa largeur, quoi qu'il arrive à la colonne.
                     .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 4)
+                Spacer(minLength: SidebarIcon.gap)
                 // Emplacement d'état réservé en permanence : sans lui, l'apparition du
                 // loader pousse le reste de la ligne et casse l'alignement des icônes.
                 Group {
