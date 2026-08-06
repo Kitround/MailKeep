@@ -1,12 +1,18 @@
 import SwiftUI
 import AppKit
 
-/// Impose les bornes de la colonne latérale au `NSSplitViewItem` sous-jacent.
+/// Impose les bornes de largeur de la colonne latérale au `NSSplitViewItem` qui la porte.
 ///
-/// Les bornes SwiftUI (`navigationSplitViewColumnWidth`) ne sont appliquées qu'à la première
-/// mise en page : fenêtre fermée puis rouverte, la colonne se comprimait sous son minimum
-/// (textes tronqués), et un glissé la poussait au-delà de son maximum jusqu'à avaler la
-/// fenêtre. AppKit, lui, respecte ces épaisseurs à tout moment.
+/// Pourquoi ne pas se contenter de `navigationSplitViewColumnWidth` : ses bornes ne sont
+/// appliquées qu'à la première mise en page. Fenêtre fermée puis rouverte, la colonne
+/// repartait sous son minimum ; tirée à la main, elle dépassait son maximum.
+///
+/// Deux pièges, tous deux rencontrés :
+/// - viser `splitViewItems.first` du contrôleur racine ne désigne pas notre colonne dans la
+///   hiérarchie que SwiftUI construit — la recherche échouait et aucune borne n'était posée.
+///   On remonte donc depuis notre propre vue jusqu'à l'enfant direct du `NSSplitView`.
+/// - toute écriture qui salit la mise en page relance `updateNSView`, qui réécrit, etc.
+///   D'où l'écriture strictement idempotente : on ne touche que ce qui diffère.
 private struct SidebarWidthBounds: NSViewRepresentable {
     let minimum: CGFloat
     let maximum: CGFloat
@@ -14,28 +20,25 @@ private struct SidebarWidthBounds: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        // Asynchrone : au moment de l'appel la vue n'est pas encore dans une fenêtre.
-        DispatchQueue.main.async {
-            // On remonte depuis notre propre vue jusqu'à la colonne du split, plutôt que de
-            // deviner « la première colonne » depuis le contrôleur racine : c'est notre
-            // colonne à coup sûr, et ça résiste au fait que SwiftUI change sa hiérarchie.
-            var candidate: NSView? = nsView
-            while let view = candidate, !(view.superview is NSSplitView) {
-                candidate = view.superview
-            }
-            guard let column = candidate,
-                  let splitView = column.superview as? NSSplitView,
-                  let index = splitView.arrangedSubviews.firstIndex(of: column) else { return }
+        // Asynchrone : au moment de l'appel la vue n'est pas encore dans sa fenêtre.
+        DispatchQueue.main.async { apply(from: nsView) }
+    }
 
-            splitView.setHoldingPriority(.defaultHigh + 1, forSubviewAt: index)
-
-            guard let controller = splitView.delegate as? NSSplitViewController,
-                  controller.splitViewItems.indices.contains(index) else { return }
-            let item = controller.splitViewItems[index]
-            item.canCollapse = false
-            item.minimumThickness = minimum
-            item.maximumThickness = maximum
+    private func apply(from nsView: NSView) {
+        var candidate: NSView? = nsView
+        while let view = candidate, !(view.superview is NSSplitView) {
+            candidate = view.superview
         }
+        guard let column = candidate,
+              let splitView = column.superview as? NSSplitView,
+              let controller = splitView.delegate as? NSSplitViewController,
+              let index = splitView.arrangedSubviews.firstIndex(of: column),
+              controller.splitViewItems.indices.contains(index) else { return }
+
+        let item = controller.splitViewItems[index]
+        if item.minimumThickness != minimum { item.minimumThickness = minimum }
+        if item.maximumThickness != maximum { item.maximumThickness = maximum }
+        if item.canCollapse { item.canCollapse = false }
     }
 }
 
@@ -57,7 +60,6 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(
                     min: sidebarWidth, ideal: sidebarWidth, max: sidebarWidth + Self.sidebarSlack
                 )
-                // Les mêmes bornes côté AppKit, seul niveau où elles tiennent vraiment.
                 .background(SidebarWidthBounds(
                     minimum: sidebarWidth, maximum: sidebarWidth + Self.sidebarSlack
                 ))
