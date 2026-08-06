@@ -36,21 +36,19 @@ private struct SidebarWidthLock: NSViewRepresentable {
         // Les deux bornes étant égales, il n'existe aucune plage de glissement, donc rien
         // à quoi ce code puisse s'opposer pendant que l'utilisateur tire le séparateur.
         if coordinator.observers.isEmpty {
-            // `will` autant que `did` : après une reconstruction des colonnes — l'historique
-            // qui se met à jour, la liste d'emails qui prend le relais — le nouvel item
-            // repart avec des épaisseurs par défaut. Sans le `will`, le séparateur était
-            // saisissable pendant cette fenêtre de temps ; on repose les bornes avant que
-            // le déplacement ne soit calculé.
-            for name in [NSSplitView.willResizeSubviewsNotification,
-                         NSSplitView.didResizeSubviewsNotification] {
-                coordinator.observers.append(
-                    NotificationCenter.default.addObserver(
-                        forName: name, object: nil, queue: .main
-                    ) { [weak coordinator] _ in
-                        coordinator?.reapply?()
-                    }
-                )
-            }
+            // Uniquement `did`, et de façon différée. Reposer les bornes sur
+            // `willResizeSubviews` revenait à modifier les épaisseurs pendant la passe de
+            // redimensionnement d'AppKit : il recalculait au milieu de son propre travail
+            // et la colonne s'effondrait en pleine sauvegarde. On attend donc que la passe
+            // soit terminée avant d'écrire quoi que ce soit.
+            coordinator.observers.append(
+                NotificationCenter.default.addObserver(
+                    forName: NSSplitView.didResizeSubviewsNotification,
+                    object: nil, queue: .main
+                ) { [weak coordinator] _ in
+                    DispatchQueue.main.async { coordinator?.reapply?() }
+                }
+            )
         }
         DispatchQueue.main.async { coordinator.reapply?() }
     }
