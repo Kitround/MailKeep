@@ -8,16 +8,15 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
-                // Deux contraintes, et les deux sont nécessaires.
-                // `navigationSplitViewColumnWidth` ne s'applique qu'à la première mise en
-                // page : fenêtre fermée puis rouverte, la colonne se comprimait sous le
-                // minimum (noms tronqués, icônes à la ligne). Le `frame` sur le contenu
-                // lui donne une largeur propre, qu'AppKit ne peut pas écraser en
-                // restaurant une position de séparateur enregistrée.
-                // `min` sert aussi de largeur au premier lancement : `ideal` n'est pas
-                // appliqué tant qu'aucun état de split n'a été restauré.
-                .frame(minWidth: 260, idealWidth: 290, maxWidth: 360)
-                .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 360)
+                // Largeur fixe, assumée. La variante redimensionnable
+                // (`navigationSplitViewColumnWidth(min:ideal:max:)`) n'a tenu ni sa borne
+                // basse ni sa borne haute : à la réouverture de la fenêtre la colonne se
+                // comprimait sous le minimum (noms tronqués, icônes à la ligne), et tirée
+                // à la main elle dépassait le maximum jusqu'à avaler la fenêtre — le
+                // `frame` du contenu ne borne pas le séparateur. Une largeur unique ne
+                // peut casser dans aucun des deux sens.
+                .frame(width: 290)
+                .navigationSplitViewColumnWidth(290)
                 .toolbar(removing: .sidebarToggle)
         } content: {
             // Center panel: email list if mbox available, else backup history
