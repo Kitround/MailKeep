@@ -40,10 +40,16 @@ struct AccountRowView: View {
             .contentShape(Rectangle())
             .onTapGesture { isExpanded.toggle() }
 
-            // Per-account settings — vertically centered against the name + email lines.
-            if !isExpanded && isBacking {
-                ProgressView().controlSize(.small)
+            // Emplacement d'état réservé en permanence, comme sur les lignes de dossier :
+            // la roue crantée reste alignée avec les « … » que le compte tourne ou non.
+            Group {
+                if !isExpanded && isBacking {
+                    ProgressView().controlSize(.small)
+                }
             }
+            .frame(width: SidebarIcon.status)
+
+            // Per-account settings — vertically centered against the name + email lines.
             Button(action: onEdit) {
                 SidebarIconLabel(systemName: "gearshape", isHovered: gearHovered)
             }

@@ -31,14 +31,19 @@ struct FolderRowView: View {
                     .foregroundStyle(folder.isEnabled ? .primary : .secondary)
                     // Jamais de « … » : le texte garde sa largeur, quoi qu'il arrive à la colonne.
                     .fixedSize(horizontal: true, vertical: false)
-                Spacer()
-                if isRunning {
-                    ProgressView().controlSize(.mini)
-                } else if !folder.isEnabled {
-                    Image(systemName: "pause.circle")
-                        .foregroundStyle(.tertiary)
-                        .font(.caption)
+                Spacer(minLength: 4)
+                // Emplacement d'état réservé en permanence : sans lui, l'apparition du
+                // loader pousse le reste de la ligne et casse l'alignement des icônes.
+                Group {
+                    if isRunning {
+                        ProgressView().controlSize(.mini)
+                    } else if !folder.isEnabled {
+                        Image(systemName: "pause.circle")
+                            .foregroundStyle(.tertiary)
+                            .font(.caption)
+                    }
                 }
+                .frame(width: SidebarIcon.status)
             }
             .contentShape(Rectangle())
             .onTapGesture { select() }

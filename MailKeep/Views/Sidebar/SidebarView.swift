@@ -63,11 +63,14 @@ private final class ClosureMenuItem: NSMenuItem {
 /// donc les textes réellement affichés — libellés de comptes, adresses, noms de dossiers —
 /// et on ajoute le décor de chaque ligne (chevron, retrait, icône, bouton d'action, marge).
 enum SidebarMetrics {
-    /// Décor d'une ligne de compte : chevron + marge, puis roue crantée + marge droite.
-    private static let accountChrome: CGFloat = 22 + 36
-    /// Décor d'une ligne de dossier : retrait + icône + espacement, puis menu + marge droite.
-    private static let folderChrome: CGFloat = 41 + 16 + 8 + 36
-    private static let historyChrome: CGFloat = 24 + 36
+    /// Zone de droite commune à toutes les lignes : emplacement d'état réservé au loader,
+    /// espacement, icône d'action, marge droite.
+    private static let trailingZone: CGFloat = SidebarIcon.status + 4 + 28 + SidebarIcon.trailing
+    /// Décor d'une ligne de compte : chevron + marge, puis la zone de droite.
+    private static let accountChrome: CGFloat = 22 + trailingZone
+    /// Décor d'une ligne de dossier : retrait + icône + espacement, puis la zone de droite.
+    private static let folderChrome: CGFloat = 41 + 16 + 8 + trailingZone
+    private static let historyChrome: CGFloat = 24 + trailingZone
     /// Marge de sécurité : mesurer au pixel près laisse apparaître des « … » dès que le
     /// rendu réel diffère d'un cheveu de la mesure.
     private static let safety: CGFloat = 12
@@ -99,8 +102,12 @@ enum SidebarMetrics {
 enum SidebarIcon {
     /// 16 = taille de `.body` (13) + 3, calée à l'œil.
     static let font = Font.system(size: 16)
-    /// Marge droite du glyphe, identique pour les deux icônes.
-    static let trailing: CGFloat = 8
+    /// Marge droite du glyphe, identique pour les deux icônes. Mesurée depuis le bord de
+    /// la colonne : en dessous, les icônes touchent le séparateur.
+    static let trailing: CGFloat = 12
+    /// Emplacement réservé au loader / à l'indicateur de pause, à gauche de l'icône
+    /// d'action. Toujours occupé, même vide, pour que rien ne bouge quand il s'affiche.
+    static let status: CGFloat = 16
     /// Marge cliquable autour du glyphe : 16 + 2×6 = zone de 28.
     static let pad: CGFloat = 6
     /// Zone cliquable, et surtout boîte carrée commune : `gearshape` et
