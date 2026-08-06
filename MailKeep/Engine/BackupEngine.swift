@@ -22,16 +22,20 @@ final class BackupEngine: ObservableObject {
 
     // MARK: - Public API
 
-    /// Lance tous les comptes activés en parallèle (un Task par dossier).
+    /// Lance les comptes activés en parallèle, mais leurs dossiers l'un après l'autre :
+    /// chaque dossier ouvre sa propre connexion IMAP et les serveurs plafonnent le nombre
+    /// de connexions simultanées par compte (Posteo ~10, Gmail 15).
     func backupAll() async {
         guard let state = appState else { return }
         var succeededAccounts: Set<UUID> = []
         await withTaskGroup(of: (UUID, Bool).self) { group in
             for account in state.accounts where account.isEnabled {
-                for folder in account.folders where folder.isEnabled {
-                    group.addTask { @MainActor in
-                        (account.id, await self.backupFolder(account: account, folder: folder))
+                group.addTask { @MainActor in
+                    var ok = false
+                    for folder in account.folders where folder.isEnabled {
+                        if await self.backupFolder(account: account, folder: folder) { ok = true }
                     }
+                    return (account.id, ok)
                 }
             }
             for await (accountID, ok) in group where ok {
@@ -48,16 +52,12 @@ final class BackupEngine: ObservableObject {
         }
     }
 
-    /// Lance tous les dossiers d'un compte en parallèle.
+    /// Lance les dossiers d'un compte l'un après l'autre — une seule connexion IMAP
+    /// ouverte à la fois vers ce serveur.
     func backupAccount(_ account: IMAPAccount) async {
         var anySuccess = false
-        await withTaskGroup(of: Bool.self) { group in
-            for folder in account.folders where folder.isEnabled {
-                group.addTask { @MainActor in
-                    await self.backupFolder(account: account, folder: folder)
-                }
-            }
-            for await ok in group where ok { anySuccess = true }
+        for folder in account.folders where folder.isEnabled {
+            if await backupFolder(account: account, folder: folder) { anySuccess = true }
         }
         if anySuccess, var updated = appState?.accounts.first(where: { $0.id == account.id }) {
             updated.schedule.lastBackupDate = Date()
@@ -69,6 +69,10 @@ final class BackupEngine: ObservableObject {
     @discardableResult
     func backupFolder(account: IMAPAccount, folder: MailFolder) async -> Bool {
         guard let state = appState, let baseURL = state.backupBaseURL else { return false }
+
+        // Un Stop demandé hors de la boucle (pendant la connexion, le flush final, ou sur
+        // un run qui a échoué) restait armé et arrêtait le run suivant au premier message.
+        stopRequested.remove(stopKey(account.id, folder.name))
 
         var progress = BackupProgress(
             accountID: account.id,
@@ -162,18 +166,18 @@ final class BackupEngine: ObservableObject {
 
                 let msg = try await fetchWithRetry(uid: uid, getClient: { client }, reconnect: reconnect)
 
-                let sender = MboxStore.extractSender(from: msg.rfc822)
-                let (year, month) = yearMonthFrom(internalDate: msg.internalDate)
+                let (year, month) = MboxStore.yearMonth(fromInternalDate: msg.internalDate)
                 let mboxURL = MboxStore.mboxURL(
                     baseDir: baseURL, account: account,
                     folderName: folder.name, year: year, month: month
                 )
-                let (fileOffset, fileLength) = try MboxStore.appendMessage(
-                    messageData: msg.rfc822,
-                    internalDate: msg.internalDate,
-                    sender: sender,
-                    to: mboxURL
-                )
+                // Écriture mbox + parsing des en-têtes hors du main actor : sur un mail
+                // à grosses pièces jointes, les faire ici gelait l'interface.
+                let written = try await Task.detached(priority: .userInitiated) {
+                    try Self.writeMessage(msg.rfc822, internalDate: msg.internalDate, to: mboxURL)
+                }.value
+                let fileOffset = written.offset
+                let fileLength = written.length
                 bytesWritten += Int64(fileLength)
                 downloadedUIDs.insert(uid)
 
@@ -189,42 +193,33 @@ final class BackupEngine: ObservableObject {
                     ))
                 }
 
-                let headerMsg = EmailParser.parseHeadersOnly(data: msg.rfc822)
                 indexEntries.append(EmailIndexEntry(
-                    id: headerMsg.id,
-                    from: headerMsg.from, to: headerMsg.to, cc: headerMsg.cc,
-                    subject: headerMsg.subject, date: headerMsg.date,
+                    id: UUID(),
+                    from: written.from, to: written.to, cc: written.cc,
+                    subject: written.subject, date: written.date,
                     filename: mboxURL.lastPathComponent,
                     offset: fileOffset, length: fileLength,
-                    hasAttachments: headerMsg.hasAttachments
+                    hasAttachments: written.hasAttachments
                 ))
                 newEntriesSinceFlush += 1
 
                 if downloadedUIDs.count % 50 == 0 {
-                    try stateStore.addUIDs(
-                        downloadedUIDs,
-                        accountID: account.id,
-                        folderName: folder.name,
-                        uidValidity: folderStatus.uidValidity
-                    )
+                    try await flushUIDs(downloadedUIDs, account: account, folder: folder,
+                                        uidValidity: folderStatus.uidValidity)
                     downloadedUIDs = []
                 }
                 if newEntriesSinceFlush >= 250 {
-                    try indexStore.save(indexEntries)
+                    try await save(indexEntries, to: indexStore)
                     newEntriesSinceFlush = 0
                 }
             }
 
             // Flush restant
             if newEntriesSinceFlush > 0 {
-                try indexStore.save(indexEntries)
+                try await save(indexEntries, to: indexStore)
             }
-            try stateStore.addUIDs(
-                downloadedUIDs,
-                accountID: account.id,
-                folderName: folder.name,
-                uidValidity: folderStatus.uidValidity
-            )
+            try await flushUIDs(downloadedUIDs, account: account, folder: folder,
+                                uidValidity: folderStatus.uidValidity)
 
             try? await client.logout()
 
@@ -302,15 +297,6 @@ final class BackupEngine: ObservableObject {
     func requestStop(accountID: UUID, folderName: String) {
         stopRequested.insert(stopKey(accountID, folderName))
     }
-
-    func stopAll() {
-        guard let state = appState else { return }
-        for p in state.activeProgress.values {
-            stopRequested.insert(stopKey(p.accountID, p.folderName))
-        }
-    }
-
-    func cancelAll() { stopAll() }
 
     // MARK: - Import
 
@@ -420,8 +406,10 @@ final class BackupEngine: ObservableObject {
         state.activeProgress[progressID] = progress
 
         do {
-            let messages = try MboxStore.readMessagesWithInternalDate(from: mboxURL)
-            progress.total = messages.count
+            // Positions seules : le contenu est relu message par message, un mbox de
+            // plusieurs gigaoctets ne doit jamais tenir en mémoire d'un bloc.
+            let ranges = try await Task.detached { try MboxStore.messageRanges(in: mboxURL) }.value
+            progress.total = ranges.count
             state.activeProgress[progressID] = progress
 
             let client = IMAPClient()
@@ -438,9 +426,15 @@ final class BackupEngine: ObservableObject {
             // En revanche, des échecs consécutifs (connexion morte) font abandonner.
             var failedCount = 0
             var consecutiveFailures = 0
-            for (i, item) in messages.enumerated() {
+            for (i, range) in ranges.enumerated() {
                 progress.current = i + 1
                 state.activeProgress[progressID] = progress
+                let item = try await Task.detached {
+                    try MboxStore.readMessageWithInternalDate(
+                        at: range.offset, length: range.length, from: mboxURL
+                    )
+                }.value
+                guard !item.data.isEmpty else { continue }
                 do {
                     try await client.appendMessage(to: folder.name, data: item.data, internalDate: item.internalDate)
                     consecutiveFailures = 0
@@ -561,9 +555,10 @@ final class BackupEngine: ObservableObject {
 
         try? fm.removeItem(at: idxURL)
 
+        // Correspondance stricte, pas un simple préfixe : « INBOX » ne doit pas emporter
+        // les fichiers de « INBOX/Travail » (assaini en « INBOX_Travail ») ni de « INBOXOLD ».
         if let contents = try? fm.contentsOfDirectory(at: accountDir, includingPropertiesForKeys: nil) {
-            for url in contents where url.pathExtension == "mbox"
-                && url.lastPathComponent.hasPrefix(safeFolder) {
+            for url in contents where MboxStore.isMbox(url.lastPathComponent, ofFolder: safeFolder) {
                 try? fm.removeItem(at: url)
             }
         }
@@ -571,8 +566,7 @@ final class BackupEngine: ObservableObject {
         // Self-contained .eml archives for this folder (named "<folder>_<period>_<offset>.eml")
         let archiveDir = MboxStore.archiveDir(baseDir: baseURL, account: account)
         if let contents = try? fm.contentsOfDirectory(at: archiveDir, includingPropertiesForKeys: nil) {
-            for url in contents where url.pathExtension == "eml"
-                && url.lastPathComponent.hasPrefix(safeFolder) {
+            for url in contents where MboxStore.isArchive(url.lastPathComponent, ofFolder: safeFolder) {
                 try? fm.removeItem(at: url)
             }
         }
@@ -591,15 +585,50 @@ final class BackupEngine: ObservableObject {
         "\(accountID)|\(folderName)"
     }
 
-    private func yearMonthFrom(internalDate: String) -> (Int, Int) {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "d-MMM-yyyy HH:mm:ss Z"
-        let date = formatter.date(from: internalDate.trimmingCharacters(in: .whitespaces)) ?? Date()
-        let comps = Calendar.current.dateComponents([.year, .month], from: date)
-        return (comps.year ?? Calendar.current.component(.year, from: Date()),
-                comps.month ?? Calendar.current.component(.month, from: Date()))
+    /// Écriture mbox + lecture des en-têtes, exécutées hors du main actor.
+    private struct WrittenMessage: Sendable {
+        let offset: Int64
+        let length: Int
+        let from: String
+        let to: String
+        let cc: String
+        let subject: String
+        let date: Date?
+        let hasAttachments: Bool
     }
+
+    nonisolated private static func writeMessage(
+        _ rfc822: Data, internalDate: String, to mboxURL: URL
+    ) throws -> WrittenMessage {
+        let sender = MboxStore.extractSender(from: rfc822)
+        let (offset, length) = try MboxStore.appendMessage(
+            messageData: rfc822, internalDate: internalDate, sender: sender, to: mboxURL
+        )
+        let headers = EmailParser.parseHeadersOnly(data: rfc822)
+        return WrittenMessage(
+            offset: offset, length: length,
+            from: headers.from, to: headers.to, cc: headers.cc,
+            subject: headers.subject, date: headers.date,
+            hasAttachments: headers.hasAttachments
+        )
+    }
+
+    /// Toujours appelé, même avec un lot vide : c'est ce qui persiste l'UIDVALIDITY
+    /// d'un dossier déjà à jour, sans quoi le run suivant re-télécharge tout.
+    private func flushUIDs(_ uids: Set<UInt32>, account: IMAPAccount,
+                           folder: MailFolder, uidValidity: UInt32) async throws {
+        let store = stateStore
+        let accountID = account.id
+        let folderName = folder.name
+        try await Task.detached(priority: .utility) {
+            try store.addUIDs(uids, accountID: accountID, folderName: folderName, uidValidity: uidValidity)
+        }.value
+    }
+
+    private func save(_ entries: [EmailIndexEntry], to store: EmailIndexStore) async throws {
+        try await Task.detached(priority: .utility) { try store.save(entries) }.value
+    }
+
 }
 
 enum RestoreError: LocalizedError {

@@ -70,10 +70,17 @@ struct WebView: NSViewRepresentable {
 
         // Block external navigation — open clicked links in the browser; deny any
         // other remote navigation (e.g. <meta http-equiv="refresh"> redirects).
+        /// Seuls ces schémas sont transmis au système sur clic. Un mail peut contenir
+        /// n'importe quel lien : `file://`, `smb://` ou un schéma applicatif ouvriraient
+        /// une ressource locale ou une autre app d'un simple clic.
+        private static let openableSchemes: Set<String> = ["http", "https", "mailto"]
+
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             if action.navigationType == .linkActivated, let url = action.request.url {
-                NSWorkspace.shared.open(url)
+                if let scheme = url.scheme?.lowercased(), Self.openableSchemes.contains(scheme) {
+                    NSWorkspace.shared.open(url)
+                }
                 decisionHandler(.cancel)
             } else if let scheme = action.request.url?.scheme?.lowercased(),
                       scheme == "http" || scheme == "https" {

@@ -70,6 +70,9 @@ enum EmailParser {
         msg.cc      = decodeHeaderValue(headers["cc"]      ?? "")
         msg.subject = decodeHeaderValue(headers["subject"] ?? "").nonEmptyOrDefault("(Sans sujet)")
         msg.date    = parseDate(headers["date"] ?? "")
+        msg.messageID  = headers["message-id"]?.trimmingCharacters(in: .whitespaces)
+        msg.inReplyTo  = headers["in-reply-to"]?.trimmingCharacters(in: .whitespaces)
+        msg.references = headers["references"]?.trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: - Body parsing

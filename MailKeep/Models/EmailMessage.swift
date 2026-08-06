@@ -46,6 +46,11 @@ struct EmailMessage: Identifiable {
     var cc: String = ""
     var subject: String = "(Sans sujet)"
     var date: Date? = nil
+    // Identité RFC 5322 — reportée telle quelle dans l'archive .eml, sinon la
+    // réimportation crée des doublons et casse les fils de discussion.
+    var messageID: String? = nil
+    var inReplyTo: String? = nil
+    var references: String? = nil
     var bodyText: String? = nil
     var bodyHTML: String? = nil
     var hasAttachments: Bool = false   // set from index — true même avant chargement du corps

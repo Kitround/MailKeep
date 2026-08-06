@@ -176,6 +176,11 @@ struct FolderPickerView: View {
                 result.append(MailFolder(name: name))
             }
         }
+        // Un dossier déjà configuré mais absent du LIST courant (serveur qui a hoqueté,
+        // droits temporairement retirés) était supprimé sans un mot — on le garde.
+        for folder in account.folders where !availableFolders.contains(folder.name) {
+            result.append(folder)
+        }
         account.folders = result
     }
 }

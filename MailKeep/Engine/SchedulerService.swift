@@ -9,6 +9,9 @@ final class SchedulerService: ObservableObject {
     func start(appState: AppState, engine: BackupEngine) {
         self.appState = appState
         self.engine = engine
+        // start() est appelé depuis le onAppear de la fenêtre : une seconde fenêtre
+        // lançait un deuxième timer, donc deux backups planifiés simultanés.
+        guard timer == nil else { return }
 
         // Check every minute if a scheduled backup is due
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in

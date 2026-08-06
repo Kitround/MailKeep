@@ -13,6 +13,8 @@ struct AccountSettingsView: View {
     @State private var testSuccess = false
     @State private var showFolderPicker = false
     @State private var isSaving = false
+    /// Identité au moment de l'ouverture, pour repérer un changement d'identifiant/serveur.
+    @State private var originalAccount: IMAPAccount? = nil
 
     private let keychain = KeychainStore()
 
@@ -133,6 +135,7 @@ struct AccountSettingsView: View {
         .frame(minWidth: 480, minHeight: 520)
         .onAppear {
             password = (try? keychain.load(for: account)) ?? ""
+            if originalAccount == nil { originalAccount = account }
         }
     }
 
@@ -172,6 +175,12 @@ struct AccountSettingsView: View {
     private func save() {
         isSaving = true
         do {
+            // La clé Trousseau est « identifiant@serveur » : renommer l'un des deux
+            // laissait l'ancien mot de passe orphelin dans le Trousseau.
+            if let previous = originalAccount,
+               previous.username != account.username || previous.host != account.host {
+                keychain.delete(for: previous)
+            }
             try keychain.save(password: password, for: account)
             if isNew {
                 appState.addAccount(account)

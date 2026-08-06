@@ -27,13 +27,58 @@ struct MboxStore {
 
     static func mboxURLs(baseDir: URL, account: IMAPAccount, folderName: String) -> [URL] {
         let dir = accountDir(baseDir: baseDir, account: account)
-        let prefix = sanitize(folderName) + "_"
+        let safe = sanitize(folderName)
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: nil
         ) else { return [] }
         return files
-            .filter { $0.lastPathComponent.hasPrefix(prefix) && $0.pathExtension == "mbox" }
+            .filter { isMbox($0.lastPathComponent, ofFolder: safe) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// Vrai si le fichier est un .mbox de CE dossier précis.
+    /// Un simple préfixe ne suffit pas : `sanitize` remplace `/` par `_`, donc
+    /// « INBOX » attraperait « INBOX_Travail_2026-08.mbox » (dossier INBOX/Travail)
+    /// et « INBOXOLD_2026-08.mbox ». Le suffixe doit être une période ou un import.
+    static func isMbox(_ filename: String, ofFolder safeFolder: String) -> Bool {
+        guard let rest = suffixAfterFolder(filename, safeFolder, extension: "mbox") else { return false }
+        return isPeriod(rest) || isImportStamp(rest)
+    }
+
+    /// Vrai si le fichier est une archive .eml de CE dossier : « <safe>_<période>_<offset>.eml ».
+    static func isArchive(_ filename: String, ofFolder safeFolder: String) -> Bool {
+        guard let rest = suffixAfterFolder(filename, safeFolder, extension: "eml"),
+              let lastUnderscore = rest.lastIndex(of: "_") else { return false }
+        let period = String(rest[rest.startIndex..<lastUnderscore])
+        let offset = rest[rest.index(after: lastUnderscore)...]
+        guard !offset.isEmpty, offset.allSatisfy(\.isNumber) else { return false }
+        return isPeriod(period) || isImportStamp(period)
+    }
+
+    /// « INBOX_2026-08.mbox » + « INBOX » → « 2026-08 ». nil si le nom appartient
+    /// à un autre dossier ou à une autre extension.
+    private static func suffixAfterFolder(_ filename: String, _ safeFolder: String, extension ext: String) -> String? {
+        let prefix = safeFolder + "_"
+        let suffix = "." + ext
+        guard filename.hasPrefix(prefix), filename.hasSuffix(suffix) else { return nil }
+        let start = filename.index(filename.startIndex, offsetBy: prefix.count)
+        let end = filename.index(filename.endIndex, offsetBy: -suffix.count)
+        guard start < end else { return nil }
+        return String(filename[start..<end])
+    }
+
+    /// « 2026-08 »
+    private static func isPeriod(_ s: String) -> Bool {
+        let parts = s.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[0].count == 4, parts[1].count == 2 else { return false }
+        return parts.allSatisfy { $0.allSatisfy(\.isNumber) }
+    }
+
+    /// « imported_20260806_143012 » ou « imported_20260806_143012_2 »
+    private static func isImportStamp(_ s: String) -> Bool {
+        let parts = s.split(separator: "_", omittingEmptySubsequences: false)
+        guard parts.count == 3 || parts.count == 4, parts[0] == "imported" else { return false }
+        return parts.dropFirst().allSatisfy { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
     }
 
     static func indexURL(baseDir: URL, account: IMAPAccount, folderName: String) -> URL {
@@ -88,6 +133,9 @@ struct MboxStore {
             defer { try? handle.close() }
             let offset = Int64(try handle.seekToEnd())
             try handle.write(contentsOf: output)
+            // Sans ça, un crash laisse un dernier bloc tronqué que l'index référence
+            // pourtant comme complet.
+            try handle.synchronize()
             return (offset: offset, length: output.count)
         } else {
             try output.write(to: fileURL, options: .atomic)
@@ -145,83 +193,25 @@ struct MboxStore {
         return out
     }
 
-    // MARK: - Read (streaming)
+    // MARK: - Read
 
-    static func streamMessages(from fileURL: URL, onMessage: (Data) -> Void) throws {
+    /// Reads one message block along with the IMAP-format internal date parsed from its
+    /// "From <sender> <ctime>" separator line. Returns nil for the date if it cannot be
+    /// parsed — caller should pass nil to APPEND in that case. One message at a time:
+    /// a restore must never hold a whole multi-gigabyte mbox in memory.
+    static func readMessageWithInternalDate(
+        at offset: Int64, length: Int, from fileURL: URL
+    ) throws -> (data: Data, internalDate: String?) {
+        guard offset >= 0, length > 0 else { return (Data(), nil) }
         let handle = try FileHandle(forReadingFrom: fileURL)
         defer { try? handle.close() }
-
-        let delimiter = Data("\nFrom ".utf8)
-        let chunkSize = 4 * 1024 * 1024
-        var buffer = Data()
-        var isFirst = true
-
-        while true {
-            let chunk = try handle.read(upToCount: chunkSize) ?? Data()
-            buffer.append(chunk)
-
-            var searchStart = buffer.startIndex
-            while let range = buffer.range(of: delimiter, in: searchStart..<buffer.endIndex) {
-                let msgData = Data(buffer[searchStart..<range.lowerBound])
-                if isFirst {
-                    isFirst = false
-                    let cleaned = stripMboxFromLine(msgData)
-                    if !cleaned.isEmpty { onMessage(unescapeMboxData(cleaned)) }
-                } else {
-                    if !msgData.isEmpty { onMessage(unescapeMboxData(msgData)) }
-                }
-                searchStart = range.upperBound
-                isFirst = false
-            }
-
-            // Trim consumed bytes. withUnsafeBytes forces a genuine heap copy so we never
-            // accumulate an NSSubrangeData whose internal offset eventually overflows UInt64
-            // in rangeOfData:options:range: → NSRangeException.
-            if searchStart > 0 && searchStart < buffer.endIndex {
-                buffer = buffer.withUnsafeBytes { src in
-                    Data(bytes: src.baseAddress!.advanced(by: searchStart),
-                         count: src.count - searchStart)
-                }
-            } else if searchStart >= buffer.endIndex {
-                buffer = Data()
-            }
-            if chunk.isEmpty { break }
+        try handle.seek(toOffset: UInt64(offset))
+        let raw = try handle.read(upToCount: length) ?? Data()
+        let block = raw.withUnsafeBytes { src in
+            src.count > 0 ? Data(bytes: src.baseAddress!, count: src.count) : Data()
         }
-
-        if !buffer.isEmpty {
-            let msg = isFirst ? stripMboxFromLine(buffer) : buffer
-            let unescaped = unescapeMboxData(msg)
-            if !unescaped.isEmpty { onMessage(unescaped) }
-        }
-    }
-
-    static func readMessages(from fileURL: URL) throws -> [Data] {
-        var result: [Data] = []
-        try streamMessages(from: fileURL) { result.append($0) }
-        return result
-    }
-
-    /// Reads each message along with its IMAP-format internal date parsed from the
-    /// "From <sender> <ctime>" separator line. Returns nil for the date if it cannot
-    /// be parsed — caller should pass nil to APPEND in that case.
-    static func readMessagesWithInternalDate(from fileURL: URL) throws -> [(data: Data, internalDate: String?)] {
-        let ranges = try messageRanges(in: fileURL)
-        let handle = try FileHandle(forReadingFrom: fileURL)
-        defer { try? handle.close() }
-
-        var result: [(Data, String?)] = []
-        for (offset, length) in ranges {
-            try handle.seek(toOffset: UInt64(offset))
-            let raw = try handle.read(upToCount: length) ?? Data()
-            let block = raw.withUnsafeBytes { src in
-                src.count > 0 ? Data(bytes: src.baseAddress!, count: src.count) : Data()
-            }
-            let fromLine = extractFromLine(block)
-            let internalDate = fromLine.flatMap(ctimeToImapDate(fromMboxFromLine:))
-            let body = unescapeMboxData(stripMboxFromLine(block))
-            result.append((body, internalDate))
-        }
-        return result
+        let internalDate = extractFromLine(block).flatMap(ctimeToImapDate(fromMboxFromLine:))
+        return (unescapeMboxData(stripMboxFromLine(block)), internalDate)
     }
 
     private static func extractFromLine(_ block: Data) -> String? {
@@ -344,6 +334,28 @@ struct MboxStore {
             }
         }
         return "unknown@unknown"
+    }
+
+    /// Fichier mensuel dans lequel classer un message, d'après son INTERNALDATE.
+    /// Le mois est celui du fuseau du message, pas celui de la machine : sinon un mail
+    /// du 1er août 00:30 +0200 atterrit dans le fichier de juillet d'un lecteur en UTC-3.
+    static func yearMonth(fromInternalDate internalDate: String) -> (year: Int, month: Int) {
+        let trimmed = internalDate.trimmingCharacters(in: .whitespaces)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone(fromInternalDate: trimmed) ?? .current
+        let date = imapInFormatter.date(from: trimmed) ?? Date()
+        let comps = calendar.dateComponents([.year, .month], from: date)
+        let now = calendar.dateComponents([.year, .month], from: Date())
+        return (comps.year ?? now.year ?? 2000, comps.month ?? now.month ?? 1)
+    }
+
+    /// "12-Aug-2026 09:15:00 +0200" → TimeZone(+7200)
+    private static func timeZone(fromInternalDate s: String) -> TimeZone? {
+        guard let signIndex = s.lastIndex(where: { $0 == "+" || $0 == "-" }) else { return nil }
+        let digits = s[s.index(after: signIndex)...].filter(\.isNumber)
+        guard digits.count == 4, let value = Int(digits) else { return nil }
+        let seconds = (value / 100) * 3600 + (value % 100) * 60
+        return TimeZone(secondsFromGMT: s[signIndex] == "-" ? -seconds : seconds)
     }
 
     static func imapdateToCtime(_ imap: String) -> String {

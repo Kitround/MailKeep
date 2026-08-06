@@ -32,9 +32,13 @@ enum IMAPParser {
         return Int(sizeStr)
     }
 
-    // Quote an IMAP string, escaping backslash and double-quote
+    /// Quote an IMAP string, escaping backslash and double-quote. CR and LF are dropped:
+    /// a quoted string cannot contain them (RFC 3501 §4.3) and letting them through would
+    /// end the command line early — anything after would be read as a new command.
     static func quote(_ s: String) -> String {
         let escaped = s
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""

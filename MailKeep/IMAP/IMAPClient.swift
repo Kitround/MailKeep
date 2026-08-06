@@ -6,7 +6,15 @@ actor IMAPClient {
     private var receiveBuffer: Data = Data()
     private var tagCounter: Int = 1
     private let timeoutSeconds: TimeInterval = 30
+    /// Les literals ont leur propre plafond ; sans celui-ci, un serveur qui n'envoie
+    /// jamais de CRLF fait gonfler le tampon de ligne sans limite.
+    private let maxLineBytes = 8 * 1024 * 1024
     private var connectContinuation: CheckedContinuation<Void, Error>?
+
+    /// `logout()` ferme la connexion, mais aucun chemin d'erreur ne l'appelle : mot de
+    /// passe refusé, dossier introuvable, timeout… laissaient la socket ouverte jusqu'à
+    /// la fin du processus, et les échecs répétés atteignaient la limite du serveur.
+    deinit { connection?.cancel() }
 
     // MARK: - Connect (IMAPS — TLS direct sur port 993)
 
@@ -287,6 +295,10 @@ actor IMAPClient {
                       }
                     : Data()
                 return String(data: lineData, encoding: .utf8) ?? String(data: lineData, encoding: .isoLatin1) ?? ""
+            }
+            guard receiveBuffer.count <= maxLineBytes else {
+                connection?.cancel()
+                throw IMAPError.literalTooLarge(receiveBuffer.count)
             }
             let chunk = try await rawReceive()
             receiveBuffer.append(chunk)

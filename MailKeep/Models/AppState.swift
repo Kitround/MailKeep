@@ -89,6 +89,8 @@ final class AppState: ObservableObject {
     func removeAccount(_ account: IMAPAccount) {
         accounts.removeAll { $0.id == account.id }
         backupRuns.removeAll { $0.accountID == account.id }
+        // Sans ça le mot de passe IMAP restait dans le Trousseau indéfiniment.
+        KeychainStore().delete(for: account)
         if selectedAccountID == account.id { selectedAccountID = nil }
         save()
     }

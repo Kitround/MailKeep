@@ -226,7 +226,11 @@ enum MessageArchiver {
         if !message.cc.isEmpty   { headers += "Cc: \(encodeHeader(message.cc))\r\n" }
         headers += "Subject: \(encodeHeader(message.subject))\r\n"
         if let date = message.date { headers += "Date: \(rfc2822Date(date))\r\n" }
-        headers += "Message-ID: <\(UUID().uuidString)@mailkeep>\r\n"
+        // Identité d'origine conservée : sans elle, réimporter l'archive crée un doublon
+        // du mail et le détache de son fil de discussion.
+        headers += "Message-ID: \(headerToken(message.messageID) ?? "<\(UUID().uuidString)@mailkeep>")\r\n"
+        if let inReplyTo = headerToken(message.inReplyTo) { headers += "In-Reply-To: \(inReplyTo)\r\n" }
+        if let references = headerToken(message.references) { headers += "References: \(references)\r\n" }
         headers += "X-MailKeep-Archive: 1\r\n"
         headers += "MIME-Version: 1.0\r\n"
 
@@ -267,6 +271,16 @@ enum MessageArchiver {
             }
         }
         return result
+    }
+
+    /// Valeur d'en-tête reprise telle quelle (Message-ID, In-Reply-To, References) :
+    /// vidée des retours à la ligne, qui permettraient d'injecter d'autres en-têtes.
+    private static func headerToken(_ value: String?) -> String? {
+        guard let raw = value else { return nil }
+        let clean = raw.replacingOccurrences(of: "\r", with: "")
+                       .replacingOccurrences(of: "\n", with: " ")
+                       .trimmingCharacters(in: .whitespaces)
+        return clean.isEmpty ? nil : clean
     }
 
     private static func encodeHeader(_ s: String) -> String {
