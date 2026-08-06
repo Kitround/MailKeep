@@ -41,14 +41,16 @@ private struct SidebarWidthLock: NSViewRepresentable {
             // redimensionnement d'AppKit : il recalculait au milieu de son propre travail
             // et la colonne s'effondrait en pleine sauvegarde. On attend donc que la passe
             // soit terminée avant d'écrire quoi que ce soit.
-            coordinator.observers.append(
-                NotificationCenter.default.addObserver(
-                    forName: NSSplitView.didResizeSubviewsNotification,
-                    object: nil, queue: .main
-                ) { [weak coordinator] _ in
-                    DispatchQueue.main.async { coordinator?.reapply?() }
-                }
-            )
+            for name in [NSSplitView.didResizeSubviewsNotification,
+                         NSView.frameDidChangeNotification] {
+                coordinator.observers.append(
+                    NotificationCenter.default.addObserver(
+                        forName: name, object: nil, queue: .main
+                    ) { [weak coordinator] _ in
+                        DispatchQueue.main.async { coordinator?.reapply?() }
+                    }
+                )
+            }
         }
         DispatchQueue.main.async { coordinator.reapply?() }
     }
@@ -63,6 +65,12 @@ private struct SidebarWidthLock: NSViewRepresentable {
               let controller = splitView.delegate as? NSSplitViewController,
               let index = splitView.arrangedSubviews.firstIndex(of: column),
               controller.splitViewItems.indices.contains(index) else { return }
+
+        // Signal direct « la colonne a changé de largeur derrière notre dos ». Les autres
+        // déclencheurs ne couvrent pas la reconstruction déclenchée par une mise à jour des
+        // comptes : le nouvel item repart avec les épaisseurs par défaut, la largeur passée
+        // au verrou n'a pas changé, donc SwiftUI ne rappelle rien et la colonne se tronque.
+        column.postsFrameChangedNotifications = true
 
         // Épaisseurs identiques : la colonne ne peut ni être tirée, ni être écrasée par une
         // géométrie restaurée. Écritures idempotentes, pour ne pas relancer la mise en page.
