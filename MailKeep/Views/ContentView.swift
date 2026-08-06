@@ -27,6 +27,10 @@ private struct SplitViewAutosaveDisabler: NSViewRepresentable {
             }
             guard let split = candidate as? NSSplitView else { return }
             split.autosaveName = nil
+            // Second chemin de persistance, distinct des préférences : macOS réapplique la
+            // géométrie enregistrée dans l'état d'application sauvegardé, là encore après la
+            // mise en page. Une fenêtre non restaurable repart de la largeur demandée.
+            split.window?.isRestorable = false
             context.coordinator.done = true
         }
     }
