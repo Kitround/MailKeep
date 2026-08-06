@@ -8,8 +8,15 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
-                // min sert de largeur au premier lancement : SwiftUI n'applique pas
-                // `ideal` tant qu'aucun état de split n'a été restauré.
+                // Deux contraintes, et les deux sont nécessaires.
+                // `navigationSplitViewColumnWidth` ne s'applique qu'à la première mise en
+                // page : fenêtre fermée puis rouverte, la colonne se comprimait sous le
+                // minimum (noms tronqués, icônes à la ligne). Le `frame` sur le contenu
+                // lui donne une largeur propre, qu'AppKit ne peut pas écraser en
+                // restaurant une position de séparateur enregistrée.
+                // `min` sert aussi de largeur au premier lancement : `ideal` n'est pas
+                // appliqué tant qu'aucun état de split n'a été restauré.
+                .frame(minWidth: 260, idealWidth: 290, maxWidth: 360)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 290, max: 360)
                 .toolbar(removing: .sidebarToggle)
         } content: {
