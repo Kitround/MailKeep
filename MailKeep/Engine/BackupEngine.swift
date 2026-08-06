@@ -70,6 +70,14 @@ final class BackupEngine: ObservableObject {
     func backupFolder(account: IMAPAccount, folder: MailFolder) async -> Bool {
         guard let state = appState, let baseURL = state.backupBaseURL else { return false }
 
+        // Un même dossier peut être lancé depuis la barre de menu, la fenêtre, ⌘⇧B et le
+        // planificateur. Deux exécutions simultanées écrivaient le même .mbox et le même
+        // index JSON en parallèle — index corrompu et messages en double.
+        let alreadyRunning = state.activeProgress.values.contains {
+            $0.accountID == account.id && $0.folderName == folder.name
+        }
+        guard !alreadyRunning else { return false }
+
         // Un Stop demandé hors de la boucle (pendant la connexion, le flush final, ou sur
         // un run qui a échoué) restait armé et arrêtait le run suivant au premier message.
         stopRequested.remove(stopKey(account.id, folder.name))
