@@ -120,6 +120,9 @@ enum SidebarIcon {
     /// `ellipsis.circle` n'ont pas la même largeur intrinsèque, sans cadre imposé
     /// leurs centres ne tombent pas au même endroit.
     static var hit: CGFloat { 16 + 2 * pad }
+    /// Largeur totale de la zone de droite : bloc d'état, écart, bloc d'action, marge.
+    /// Réservée par un padding sur le contenu, puisque la zone est posée en surimpression.
+    static var trailingZone: CGFloat { status + gap + hit + trailing }
 }
 
 /// Glyphe d'action de la sidebar : taille, couleurs et zone cliquable élargie par
@@ -139,20 +142,29 @@ struct SidebarIconLabel: View {
     }
 }
 
-/// Zone de droite d'une ligne de sidebar : un bloc d'état puis un bloc d'action, tailles
-/// fixes, centrés verticalement, collés au bord droit. Partagée par les lignes de compte et
-/// de dossier — c'est ce qui met loaders et icônes sur les mêmes verticales, que le bloc
-/// d'état soit occupé ou vide.
-struct SidebarRowTrailing<Status: View, Action: View>: View {
-    @ViewBuilder let status: Status
-    @ViewBuilder let action: Action
-
-    var body: some View {
-        HStack(spacing: SidebarIcon.gap) {
-            status.frame(width: SidebarIcon.status, height: SidebarIcon.status)
-            action.frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
-        }
-        .padding(.trailing, SidebarIcon.trailing)
+/// Pose la zone de droite d'une ligne de sidebar : un bloc d'état puis un bloc d'action,
+/// tailles fixes, centrés verticalement.
+///
+/// En surimpression et non dans le flux : la position ne dépend alors que du bord droit de
+/// la ligne, identique pour tout le monde. Dans le flux, elle dépendait de la composition
+/// interne — VStack de trois lignes côté compte, HStack simple côté dossier, `Spacer` et
+/// textes en `fixedSize` — et les deux familles d'icônes ne tombaient pas sur la même
+/// verticale. Le contenu réserve la place par un padding de `SidebarIcon.trailingZone`.
+extension View {
+    func sidebarRowTrailing<Status: View, Action: View>(
+        @ViewBuilder status: () -> Status,
+        @ViewBuilder action: () -> Action
+    ) -> some View {
+        self
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, SidebarIcon.trailingZone)
+            .overlay(alignment: .trailing) {
+                HStack(spacing: SidebarIcon.gap) {
+                    status().frame(width: SidebarIcon.status, height: SidebarIcon.status)
+                    action().frame(width: SidebarIcon.hit, height: SidebarIcon.hit)
+                }
+                .padding(.trailing, SidebarIcon.trailing)
+            }
     }
 }
 

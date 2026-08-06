@@ -15,53 +15,44 @@ struct AccountRowView: View {
     }
 
     var body: some View {
-        // Même écart que sur les lignes de dossier, pour que loaders et icônes d'action
-        // tombent exactement sur les mêmes verticales d'une ligne à l'autre.
-        HStack(spacing: SidebarIcon.gap) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .frame(width: 16)
-                    Text(account.label.isEmpty ? account.host : account.label)
-                        .font(.headline)
-                        // Jamais de « … » : le texte garde sa largeur, quoi qu'il arrive à la colonne.
-                        .fixedSize(horizontal: true, vertical: false)
-                    Spacer()
-                }
-                Text(account.username)
-                    .font(.caption)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .frame(width: 16)
+                Text(account.label.isEmpty ? account.host : account.label)
+                    .font(.headline)
+                    // Jamais de « … » : le texte garde sa largeur, quoi qu'il arrive à la colonne.
                     .fixedSize(horizontal: true, vertical: false)
-                    .padding(.leading, 22)
-                scheduleIndicator
-                    .padding(.leading, 22)
+                Spacer()
             }
-            // Même raison que sur les lignes de dossier : avec des textes en `fixedSize`,
-            // sans largeur imposée la ligne se réduit à son contenu et la roue crantée
-            // vient se coller au texte au lieu de rester sur sa colonne.
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture { isExpanded.toggle() }
-
-            SidebarRowTrailing {
-                if !isExpanded && isBacking {
-                    ProgressView().controlSize(.small)
-                } else {
-                    // Vue concrète et non un `EmptyView`, qui ne réserverait aucune place.
-                    Color.clear
-                }
-            } action: {
-                Button(action: onEdit) {
-                    SidebarIconLabel(systemName: "gearshape", isHovered: gearHovered)
-                }
-                .buttonStyle(.plain)
-                .onHover { gearHovered = $0 }
-                .help("Réglages du compte")
-                .opacity(isHovered || gearHovered ? 1 : 0.5)
+            Text(account.username)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.leading, 22)
+            scheduleIndicator
+                .padding(.leading, 22)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { isExpanded.toggle() }
+        .sidebarRowTrailing {
+            if !isExpanded && isBacking {
+                ProgressView().controlSize(.small)
+            } else {
+                // Vue concrète et non un `EmptyView`, qui ne réserverait aucune place.
+                Color.clear
             }
+        } action: {
+            Button(action: onEdit) {
+                SidebarIconLabel(systemName: "gearshape", isHovered: gearHovered)
+            }
+            .buttonStyle(.plain)
+            .onHover { gearHovered = $0 }
+            .help("Réglages du compte")
+            .opacity(isHovered || gearHovered ? 1 : 0.5)
         }
         .listRowInsets(EdgeInsets(top: 20, leading: -3, bottom: 6, trailing: 0))
         .listRowBackground(
