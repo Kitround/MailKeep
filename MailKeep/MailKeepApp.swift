@@ -2,9 +2,16 @@ import SwiftUI
 
 @main
 struct MailKeepApp: App {
-    @StateObject private var appState = AppState()
-    @StateObject private var backupEngine = BackupEngine()
-    @StateObject private var scheduler = SchedulerService()
+    // `@State` et non `@StateObject` : volontaire. `@StateObject` abonne le corps de
+    // l'App à `objectWillChange`, donc **toute** la scène — dont `.commands`, c'est-à-dire
+    // la barre de menus — était reconstruite à chaque écriture de progression. Menu ouvert,
+    // AppKit tourne en boucle de suivi modale : chaque changement d'items appelle
+    // `menuNeedsUpdate`, qui rend la vue, qui change encore les items… jusqu'au
+    // débordement de pile. `@State` garde les objets en vie sans s'y abonner ; les vues
+    // qui en ont besoin s'abonnent individuellement via `@EnvironmentObject`.
+    @State private var appState = AppState()
+    @State private var backupEngine = BackupEngine()
+    @State private var scheduler = SchedulerService()
 
     var body: some Scene {
         WindowGroup("MailKeep", id: "main") {
