@@ -11,6 +11,38 @@ final class BackupEngine: ObservableObject {
     /// Keys of folders where a stop has been requested (accountID|folderName)
     private var stopRequested: Set<String> = []
 
+    /// Dernière publication de chaque progression, pour la limiter dans le temps.
+    private var lastProgressPublish: [UUID: Date] = [:]
+    private static let progressPublishInterval: TimeInterval = 0.2
+
+    /// Écrit la progression dans `AppState` — au plus 5 fois par seconde.
+    ///
+    /// `activeProgress` est `@Published` : chaque écriture invalide tout ce qui observe
+    /// `AppState`, **y compris la barre de menus et le MenuBarExtra**. Écrite à chaque
+    /// message (des dizaines par seconde), elle poussait la mise à jour de menu de macOS,
+    /// synchrone et ré-entrante, à se rappeler elle-même sans fin :
+    /// `menuNeedsUpdate → render → menuNeedsUpdate → …` jusqu'au débordement de pile
+    /// (SIGSEGV sur la stack guard). Se produisait surtout fenêtre réduite, le rendu
+    /// n'étant alors plus cadencé par l'affichage.
+    ///
+    /// `force` pour les transitions de phase et les états terminaux, qui doivent
+    /// s'afficher immédiatement.
+    private func publish(_ progress: BackupProgress, force: Bool = false) {
+        guard let state = appState else { return }
+        let now = Date()
+        if !force, let last = lastProgressPublish[progress.id],
+           now.timeIntervalSince(last) < Self.progressPublishInterval {
+            return
+        }
+        lastProgressPublish[progress.id] = now
+        state.activeProgress[progress.id] = progress
+    }
+
+    private func clearProgress(_ id: UUID) {
+        lastProgressPublish.removeValue(forKey: id)
+        appState?.activeProgress.removeValue(forKey: id)
+    }
+
     /// A pending .eml archive: re-read the message from the mbox we just wrote
     /// (tiny footprint) and build the archive off the critical download path.
     private struct ArchiveJob: Sendable {
@@ -88,7 +120,7 @@ final class BackupEngine: ObservableObject {
             folderName: folder.name
         )
         let progressID = progress.id
-        state.activeProgress[progressID] = progress
+        publish(progress, force: true)
 
         var run = BackupRun(
             accountID: account.id,
@@ -113,15 +145,15 @@ final class BackupEngine: ObservableObject {
             }
 
             progress.phase = .connecting
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             try await client.connect(host: account.host, port: account.port)
 
             progress.phase = .authenticating
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             try await client.login(username: account.username, password: password)
 
             progress.phase = .selectingFolder
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             let folderStatus = try await client.selectFolder(folder.name)
 
             // UID validity check — si le serveur a réassigné les UIDs, reset complet
@@ -134,7 +166,7 @@ final class BackupEngine: ObservableObject {
             }
 
             progress.phase = .fetchingUIDList
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
 
             // On récupère les UIDs correspondant au filtre du compte (par défaut SEEN
             // pour rétrocompat), puis on filtre localement avec knownUIDs. UID SEARCH
@@ -146,7 +178,7 @@ final class BackupEngine: ObservableObject {
 
             progress.total = toFetch.count
             progress.phase = .downloadingMessages
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
 
             var downloadedUIDs: Set<UInt32> = []
             var bytesWritten: Int64 = 0
@@ -170,7 +202,7 @@ final class BackupEngine: ObservableObject {
 
                 progress.current = index + 1
                 progress.currentUID = uid
-                state.activeProgress[progressID] = progress
+                publish(progress)
 
                 let msg = try await fetchWithRetry(uid: uid, getClient: { client }, reconnect: reconnect)
 
@@ -239,7 +271,7 @@ final class BackupEngine: ObservableObject {
                 progress.total = archiveJobs.count
                 progress.current = 0
                 progress.currentUID = nil
-                state.activeProgress[progressID] = progress
+                publish(progress, force: true)
 
                 var jobIterator = archiveJobs.makeIterator()
                 var completed = 0
@@ -256,7 +288,7 @@ final class BackupEngine: ObservableObject {
                         inFlight -= 1
                         completed += 1
                         progress.current = completed
-                        state.activeProgress[progressID] = progress
+                        publish(progress)
                         // Stop respected between launches; in-flight archives finish.
                         if stopRequested.remove(key) == nil, let job = jobIterator.next() {
                             group.addTask { await BackupEngine.runArchive(job) }
@@ -268,7 +300,7 @@ final class BackupEngine: ObservableObject {
 
             if wasStopped {
                 progress.phase = .stopped
-                state.activeProgress[progressID] = progress
+                publish(progress, force: true)
                 run.finishedAt = Date()
                 run.messagesDownloaded = progress.current
                 run.messagesSkipped = folderState?.backedUpUIDs.count ?? 0
@@ -277,7 +309,7 @@ final class BackupEngine: ObservableObject {
                 state.updateRun(run)
             } else {
                 progress.phase = .done
-                state.activeProgress[progressID] = progress
+                publish(progress, force: true)
                 run.finishedAt = Date()
                 run.messagesDownloaded = toFetch.count
                 run.messagesSkipped = folderState?.backedUpUIDs.count ?? 0
@@ -289,14 +321,14 @@ final class BackupEngine: ObservableObject {
         } catch {
             progress.phase = .failed
             progress.errorMessage = error.localizedDescription
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             run.finishedAt = Date()
             run.errorMessage = error.localizedDescription
             state.updateRun(run)
         }
 
         try? await Task.sleep(for: .seconds(2))
-        state.activeProgress.removeValue(forKey: progressID)
+        clearProgress(progressID)
         return succeeded
     }
 
@@ -341,7 +373,7 @@ final class BackupEngine: ObservableObject {
         progress.phase = .importing
         progress.total = urls.count
         let progressID = progress.id
-        state.activeProgress[progressID] = progress
+        publish(progress, force: true)
 
         let destDir = MboxStore.accountDir(baseDir: baseURL, account: account)
         let idxURL = MboxStore.indexURL(baseDir: baseURL, account: account, folderName: folder.name)
@@ -351,9 +383,9 @@ final class BackupEngine: ObservableObject {
         } catch {
             progress.phase = .failed
             progress.errorMessage = error.localizedDescription
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             try? await Task.sleep(for: .seconds(2))
-            state.activeProgress.removeValue(forKey: progressID)
+            clearProgress(progressID)
             return
         }
 
@@ -367,7 +399,7 @@ final class BackupEngine: ObservableObject {
 
         for (i, srcURL) in urls.enumerated() {
             progress.current = i + 1
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
 
             let accessed = srcURL.startAccessingSecurityScopedResource()
             defer { if accessed { srcURL.stopAccessingSecurityScopedResource() } }
@@ -394,10 +426,10 @@ final class BackupEngine: ObservableObject {
             progress.phase = importedCount > 0 ? .done : .failed
             progress.errorMessage = errorMessages.joined(separator: "\n")
         }
-        state.activeProgress[progressID] = progress
+        publish(progress, force: true)
 
         try? await Task.sleep(for: .seconds(2))
-        state.activeProgress.removeValue(forKey: progressID)
+        clearProgress(progressID)
     }
 
     // MARK: - Restore
@@ -411,21 +443,21 @@ final class BackupEngine: ObservableObject {
             folderName: "Restauration → \(folder.displayName)"
         )
         let progressID = progress.id
-        state.activeProgress[progressID] = progress
+        publish(progress, force: true)
 
         do {
             // Positions seules : le contenu est relu message par message, un mbox de
             // plusieurs gigaoctets ne doit jamais tenir en mémoire d'un bloc.
             let ranges = try await Task.detached { try MboxStore.messageRanges(in: mboxURL) }.value
             progress.total = ranges.count
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
 
             let client = IMAPClient()
             progress.phase = .connecting
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             try await client.connect(host: account.host, port: account.port)
             progress.phase = .authenticating
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             let password = try keychain.load(for: account)
             try await client.login(username: account.username, password: password)
 
@@ -436,7 +468,7 @@ final class BackupEngine: ObservableObject {
             var consecutiveFailures = 0
             for (i, range) in ranges.enumerated() {
                 progress.current = i + 1
-                state.activeProgress[progressID] = progress
+                publish(progress)
                 let item = try await Task.detached {
                     try MboxStore.readMessageWithInternalDate(
                         at: range.offset, length: range.length, from: mboxURL
@@ -458,16 +490,16 @@ final class BackupEngine: ObservableObject {
             if failedCount > 0 {
                 progress.errorMessage = "\(failedCount) message(s) refusé(s) par le serveur."
             }
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
 
         } catch {
             progress.phase = .failed
             progress.errorMessage = error.localizedDescription
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
         }
 
         try? await Task.sleep(for: .seconds(2))
-        state.activeProgress.removeValue(forKey: progressID)
+        clearProgress(progressID)
     }
 
     func restoreMessage(_ email: EmailMessage, to folder: MailFolder, on account: IMAPAccount) async {
@@ -480,7 +512,7 @@ final class BackupEngine: ObservableObject {
         )
         progress.total = 1
         let progressID = progress.id
-        state.activeProgress[progressID] = progress
+        publish(progress, force: true)
 
         do {
             let data: Data
@@ -494,32 +526,32 @@ final class BackupEngine: ObservableObject {
 
             let client = IMAPClient()
             progress.phase = .connecting
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             try await client.connect(host: account.host, port: account.port)
 
             progress.phase = .authenticating
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             let password = try keychain.load(for: account)
             try await client.login(username: account.username, password: password)
 
             progress.phase = .downloadingMessages
             progress.current = 1
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
             let internalDate = email.date.map { MboxStore.imapDate(from: $0) }
             try await client.appendMessage(to: folder.name, data: data, internalDate: internalDate)
 
             try? await client.logout()
             progress.phase = .done
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
 
         } catch {
             progress.phase = .failed
             progress.errorMessage = error.localizedDescription
-            state.activeProgress[progressID] = progress
+            publish(progress, force: true)
         }
 
         try? await Task.sleep(for: .seconds(2))
-        state.activeProgress.removeValue(forKey: progressID)
+        clearProgress(progressID)
     }
 
     // MARK: - Retry helper
