@@ -59,10 +59,12 @@ private struct ColumnWidthLock: NSViewRepresentable {
         }
         guard let column = candidate, let split = column.superview as? NSSplitView else { return }
 
+        // `>=` et non `==` : la colonne peut être élargie au séparateur, jamais rétrécie
+        // sous la largeur de son contenu — ni par un drag, ni par une géométrie restaurée.
         if let existing = column.constraints.first(where: { $0.identifier == identifier }) {
             if existing.constant != width { existing.constant = width }
         } else {
-            let lock = column.widthAnchor.constraint(equalToConstant: width)
+            let lock = column.widthAnchor.constraint(greaterThanOrEqualToConstant: width)
             lock.identifier = identifier
             lock.isActive = true
         }
@@ -87,9 +89,9 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
-                // Une seule valeur : la colonne ne se négocie pas. Elle sert de largeur de
-                // départ ; c'est le verrou ci-dessous qui la tient ensuite.
-                .navigationSplitViewColumnWidth(sidebarWidth)
+                // Largeur de départ ; ensuite c'est le verrou ci-dessous qui borne le
+                // plancher, le séparateur reste libre vers la droite.
+                .navigationSplitViewColumnWidth(min: sidebarWidth, ideal: sidebarWidth, max: 700)
                 .background(ColumnWidthLock(width: sidebarWidth))
                 .toolbar(removing: .sidebarToggle)
         } content: {
