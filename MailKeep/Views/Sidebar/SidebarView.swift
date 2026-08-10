@@ -57,6 +57,50 @@ private final class ClosureMenuItem: NSMenuItem {
     @objc private func fire() { handler() }
 }
 
+/// Largeur de la colonne des comptes, mesurée sur ce qu'elle contient.
+///
+/// Une `List` n'a pas de largeur intrinsèque : elle remplit ce qu'on lui donne. On mesure
+/// donc les textes réellement affichés — libellés de comptes, adresses, noms de dossiers —
+/// auxquels on ajoute le décor de la ligne : retrait de gauche, et à droite la zone que se
+/// partagent le loader et l'icône d'action, toujours réservée pour que l'apparition du
+/// loader pendant une sauvegarde ne tronque rien.
+enum SidebarMetrics {
+    /// Loader + icône d'action + marges : identique pour comptes et dossiers.
+    private static let trailingZone: CGFloat = 6 + 16 + 6 + SidebarIcon.hit + (SidebarIcon.trailing - SidebarIcon.pad)
+    /// Retrait de gauche d'une ligne de compte : inset (-3) + chevron (16) + espacement (6).
+    private static let accountLeading: CGFloat = 19
+    /// Retrait de gauche d'une ligne de dossier : inset (41) + icône (16) + espacement (8).
+    private static let folderLeading: CGFloat = 65
+    /// Ligne « Historique » : inset (-3) + icône (16) + espacement (8), marge droite 8.
+    private static let historyChrome: CGFloat = 21 + 8
+    /// Marge du conteneur : une `List` en style sidebar ajoute son propre retrait autour
+    /// des rangées, qui n'apparaît dans aucun inset posé par nos vues. Mesuré à l'écran :
+    /// sans elle, « Boîte de réception » perdait sa fin.
+    private static let listPadding: CGFloat = 28
+    /// Bornes de sécurité : un libellé vide ne doit pas produire une colonne ridicule,
+    /// une adresse à rallonge ne doit pas manger la fenêtre.
+    private static let bounds: ClosedRange<CGFloat> = 240...460
+
+    static func width(for accounts: [IMAPAccount]) -> CGFloat {
+        var widest = textWidth("Historique", style: .body) + historyChrome
+        for account in accounts {
+            let label = account.label.isEmpty ? account.host : account.label
+            widest = max(widest, accountLeading + textWidth(label, style: .headline) + trailingZone)
+            // L'adresse commence sous le libellé, au même retrait.
+            widest = max(widest, accountLeading + textWidth(account.username, style: .caption1) + trailingZone)
+            for folder in account.folders {
+                widest = max(widest, folderLeading + textWidth(folder.displayName, style: .body) + trailingZone)
+            }
+        }
+        return min(max((widest + listPadding).rounded(.up), bounds.lowerBound), bounds.upperBound)
+    }
+
+    private static func textWidth(_ string: String, style: NSFont.TextStyle) -> CGFloat {
+        let font = NSFont.preferredFont(forTextStyle: style)
+        return (string as NSString).size(withAttributes: [.font: font]).width
+    }
+}
+
 /// Métriques partagées des icônes d'action de la sidebar (roue crantée des
 /// comptes, menu « … » des dossiers), pour que les deux colonnes s'alignent.
 enum SidebarIcon {
