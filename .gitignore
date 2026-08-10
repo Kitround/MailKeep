@@ -17,9 +17,10 @@ xcuserdata/
 project.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 
-# Build artefacts
+# Build artefacts — the app itself ships through GitHub Releases, never the repo
 build/
 DerivedData/
+*.app/
 *.xcarchive
 *.dSYM.zip
 *.dSYM
