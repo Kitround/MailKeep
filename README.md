@@ -28,7 +28,7 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 - **Restore** entire folders or individual messages back to any IMAP server, original `INTERNALDATE` preserved.
 - **Import** existing `.mbox` files from Apple Mail / Thunderbird / other backups.
 - **Scheduled backups** per account (15 min → 7 days).
-- **Menu-bar companion**: live per-folder progress, one-click "Back up all", and a way back to the window from anywhere.
+- **Menu-bar companion**: one-click "Back up all" and a way back to the window from anywhere.
 - **Passwords stored in the macOS Keychain**, never in plaintext.
 - **App Sandbox** enabled, minimal entitlements (network client + user-selected files only).
 - **Read-only on the server**: backup uses `BODY.PEEK[]` and never sets the `\Seen` flag.
@@ -37,7 +37,7 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 
 ## Installation
 
-1. Download **[`MailKeep-1.9.2.zip`](https://github.com/Kitround/MailKeep/releases/latest)** from the latest release.
+1. Download **[`MailKeep-1.9.3.zip`](https://github.com/Kitround/MailKeep/releases/latest)** from the latest release.
 2. Unzip and move `MailKeep.app` into `/Applications`.
 3. First launch: right-click → **Open** to bypass Gatekeeper (the app is signed ad-hoc, not notarised).
 4. Pick a backup folder when prompted — this is where `.mbox` files will be written.

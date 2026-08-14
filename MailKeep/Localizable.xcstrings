@@ -295,17 +295,6 @@
         }
       }
     },
-    "Aucun backup effectué": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No backup performed"
-          }
-        }
-      }
-    },
     "Aucun compte": {
       "extractionState": "manual",
       "localizations": {
@@ -670,17 +659,6 @@
         }
       }
     },
-    "Dernier : ": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Last: "
-          }
-        }
-      }
-    },
     "Dernier backup": {
       "extractionState": "manual",
       "localizations": {
@@ -688,17 +666,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last backup"
-          }
-        }
-      }
-    },
-    "Dernier backup il y a ": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Last backup "
           }
         }
       }
