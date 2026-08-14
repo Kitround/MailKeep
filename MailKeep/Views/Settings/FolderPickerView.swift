@@ -152,7 +152,9 @@ struct FolderPickerView: View {
 
             await MainActor.run { phase = .listing }
             let folders = try await client.listFolders()
-            try await client.logout()
+            // La liste est déjà en main : un LOGOUT qui échoue ne doit pas la faire
+            // disparaître derrière un écran d'erreur.
+            try? await client.logout()
 
             await MainActor.run {
                 availableFolders = folders.sorted()

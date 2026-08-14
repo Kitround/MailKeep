@@ -159,9 +159,11 @@ enum MessageArchiver {
         if h == "::1" || h.hasPrefix("fe80:") || h.hasPrefix("fc") || h.hasPrefix("fd") || h.hasPrefix("::ffff:") {
             return true
         }
-        // IPv4 literal
-        let octets = h.split(separator: ".", omittingEmptySubsequences: false).compactMap { UInt16($0) }
-        if octets.count == 4, octets.allSatisfy({ $0 <= 255 }) {
+        // IPv4 literal, in whatever form. `inet_aton` — the same parser the network
+        // stack uses — accepts far more than dotted-quad: "2130706433", "0177.0.0.1"
+        // and "127.1" all reach 127.0.0.1, and each one walked straight past a
+        // dotted-quad-only check.
+        if let octets = ipv4Octets(h) {
             let a = octets[0], b = octets[1]
             if a == 0 || a == 10 || a == 127 { return true }
             if a == 169 && b == 254 { return true }            // link-local + cloud metadata
@@ -170,6 +172,18 @@ enum MessageArchiver {
             if a == 100 && (64...127).contains(b) { return true } // CGNAT
         }
         return false
+    }
+
+    /// The four bytes of an IPv4 literal, or nil when the host is not one at all.
+    private static func ipv4Octets(_ host: String) -> [UInt8]? {
+        // Reject anything with a non-address character up front: inet_aton stops at the
+        // first invalid byte, so "127.0.0.1.example.com" would otherwise read as loopback.
+        guard !host.isEmpty,
+              host.allSatisfy({ $0.isHexDigit || $0 == "." || $0 == "x" || $0 == "X" }) else { return nil }
+        var addr = in_addr()
+        guard inet_aton(host, &addr) != 0 else { return nil }
+        let raw = UInt32(bigEndian: addr.s_addr)
+        return [UInt8(raw >> 24 & 0xFF), UInt8(raw >> 16 & 0xFF), UInt8(raw >> 8 & 0xFF), UInt8(raw & 0xFF)]
     }
 
     /// Identifies an image strictly from its leading magic bytes.
@@ -319,12 +333,18 @@ enum MessageArchiver {
         return out
     }
 
-    private static func rfc2822Date(_ date: Date) -> String {
+    /// Alloué une fois : `DateFormatter` coûte cher et l'archivage en crée un par message.
+    /// Jamais muté après construction, donc lisible depuis plusieurs tâches à la fois.
+    private static let rfc2822Formatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "GMT")
         f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
-        return f.string(from: date)
+        return f
+    }()
+
+    private static func rfc2822Date(_ date: Date) -> String {
+        rfc2822Formatter.string(from: date)
     }
 
     private static func escapeHTML(_ s: String) -> String {

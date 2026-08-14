@@ -11,6 +11,8 @@ final class AppState: ObservableObject {
     @Published var selectedEmail: EmailMessage? = nil
     @Published var backupBaseURL: URL? = nil
 
+    /// Plafond de l'historique, en mémoire comme sur disque.
+    private static let maxRuns = 500
     private let accountsKey = "mailkeep_accounts"
     private let runsKey = "mailkeep_runs"
     private let bookmarkKey = "mailkeep_backup_bookmark"
@@ -47,8 +49,12 @@ final class AppState: ObservableObject {
         if let data = try? JSONEncoder().encode(accounts) {
             UserDefaults.standard.set(data, forKey: accountsKey)
         }
-        let recentRuns = Array(backupRuns.suffix(500))
-        if let data = try? JSONEncoder().encode(recentRuns) {
+        // Même plafond en mémoire que sur disque : seuls 500 runs étaient persistés, mais
+        // le tableau vivant, lui, grandissait sans fin sur une session longue.
+        if backupRuns.count > Self.maxRuns {
+            backupRuns.removeFirst(backupRuns.count - Self.maxRuns)
+        }
+        if let data = try? JSONEncoder().encode(backupRuns) {
             UserDefaults.standard.set(data, forKey: runsKey)
         }
     }
@@ -106,6 +112,10 @@ final class AppState: ObservableObject {
         backupRuns.removeAll { $0.accountID == account.id }
         // Sans ça le mot de passe IMAP restait dans le Trousseau indéfiniment.
         KeychainStore().delete(for: account)
+        // Idem pour les UIDs déjà téléchargés : le dossier d'état porte l'UUID du compte,
+        // que plus rien ne référence une fois celui-ci parti — il restait sur le disque
+        // pour toujours.
+        StateStore().wipeAccount(accountID: account.id)
         if selectedAccountID == account.id { selectedAccountID = nil }
         save()
     }

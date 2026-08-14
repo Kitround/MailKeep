@@ -288,7 +288,11 @@ final class BackupEngine: ObservableObject {
                         progress.current = completed
                         publish(progress)
                         // Stop respected between launches; in-flight archives finish.
-                        if stopRequested.remove(key) == nil, let job = jobIterator.next() {
+                        // Tested, not consumed: `remove` cleared the flag on the first
+                        // pass, so every later pass saw no stop and kept launching jobs —
+                        // a Stop during archiving only ever skipped one. The flag is
+                        // cleared at the start of the next run.
+                        if !stopRequested.contains(key), let job = jobIterator.next() {
                             group.addTask { await BackupEngine.runArchive(job) }
                             inFlight += 1
                         }
@@ -416,7 +420,12 @@ final class BackupEngine: ObservableObject {
             }
         }
 
-        try? FileManager.default.removeItem(at: idxURL)
+        // L'index n'est jeté que si quelque chose est réellement entré : il se reconstruit
+        // à la prochaine ouverture du dossier, mais un import entièrement raté n'a aucune
+        // raison de faire payer ce parcours complet.
+        if importedCount > 0 {
+            try? FileManager.default.removeItem(at: idxURL)
+        }
 
         if errorMessages.isEmpty {
             progress.phase = .done
@@ -483,7 +492,10 @@ final class BackupEngine: ObservableObject {
                 }
             }
 
-            try await client.logout()
+            // `try?` : tous les messages sont déjà déposés sur le serveur à ce stade.
+            // Un LOGOUT qui échoue (connexion coupée par le serveur juste après) faisait
+            // basculer en « échec » une restauration entièrement réussie.
+            try? await client.logout()
             progress.phase = .done
             if failedCount > 0 {
                 progress.errorMessage = "\(failedCount) message(s) refusé(s) par le serveur."
@@ -515,7 +527,10 @@ final class BackupEngine: ObservableObject {
         do {
             let data: Data
             if let url = email.mboxFileURL, email.mboxLength > 0 {
-                data = try MboxStore.readMessage(at: email.mboxOffset, length: email.mboxLength, from: url)
+                let offset = email.mboxOffset, length = email.mboxLength
+                data = try await Task.detached {
+                    try MboxStore.readMessage(at: offset, length: length, from: url)
+                }.value
             } else if let raw = email.rawData {
                 data = raw
             } else {

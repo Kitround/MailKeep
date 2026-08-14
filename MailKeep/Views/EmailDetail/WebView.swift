@@ -57,15 +57,29 @@ struct WebView: NSViewRepresentable {
                 forIdentifier: "mailkeep-block-remote",
                 encodedContentRuleList: Self.blockRulesJSON
             ) { list, _ in
-                // Completion runs on the main thread. If compilation somehow fails,
-                // fall back to loading without rules (JS is disabled either way).
+                // Completion runs on the main thread. Si la compilation échoue, on charge
+                // une version dont les sources distantes sont neutralisées plutôt que le
+                // HTML d'origine : sans règles, celui-ci allait chercher chaque pixel de
+                // suivi — exactement ce que le blocage existe pour empêcher.
                 if let list {
                     Self.cachedBlockList = list
                     webView.configuration.userContentController.removeAllContentRuleLists()
                     webView.configuration.userContentController.add(list)
+                    webView.loadHTMLString(html, baseURL: nil)
+                } else {
+                    webView.loadHTMLString(Self.neutralizingRemoteSources(in: html), baseURL: nil)
                 }
-                webView.loadHTMLString(html, baseURL: nil)
             }
+        }
+
+        /// Repli sans WebKit : réécrit `src="http…"` / `srcset` en `about:blank`, pour que
+        /// rien ne parte sur le réseau si les règles de blocage n'ont pas pu être compilées.
+        private static func neutralizingRemoteSources(in html: String) -> String {
+            html.replacingOccurrences(
+                of: #"(src|srcset)\s*=\s*["']\s*https?://[^"']*["']"#,
+                with: "$1=\"about:blank\"",
+                options: [.regularExpression, .caseInsensitive]
+            )
         }
 
         // Block external navigation — open clicked links in the browser; deny any

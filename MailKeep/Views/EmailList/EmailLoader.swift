@@ -135,7 +135,11 @@ final class EmailLoader: ObservableObject {
 
     // MARK: - Core load logic
 
-    private func performLoad(mboxURLs: [URL], indexURL: URL?, generation: Int) async throws {
+    /// `nonisolated` : sans ça la méthode héritait de l'isolation `@MainActor` de la classe,
+    /// et toute la reconstruction d'index — ouverture des fichiers, seek/read par message,
+    /// parsing des en-têtes — s'exécutait sur le main actor, gelant l'interface le temps
+    /// de parcourir le dossier. Chaque accès à `self` passe déjà par `MainActor.run`.
+    nonisolated private func performLoad(mboxURLs: [URL], indexURL: URL?, generation: Int) async throws {
         // Fast path : index JSON disponible et non vide
         if let idxURL = indexURL {
             let entries = await Task.detached { EmailIndexStore(indexURL: idxURL).load() }.value
@@ -216,9 +220,12 @@ final class EmailLoader: ObservableObject {
             Task.detached { try? EmailIndexStore(indexURL: idxURL).save(entriesToSave) }
         }
 
+        // Copie locale avant de traverser vers le main actor, comme les deux autres
+        // publications : capturer la `var` elle-même est une course en Swift 6.
+        let finalEntries = allEntries
         await MainActor.run { [weak self] in
             guard let self, self.loadGeneration == generation else { return }
-            self.applyEntries(allEntries, accountDir: accountDir)
+            self.applyEntries(finalEntries, accountDir: accountDir)
         }
     }
 

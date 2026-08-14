@@ -94,9 +94,15 @@ struct MboxStore {
     /// Self-contained .eml archive path for one message, keyed by its mbox file +
     /// byte offset — deterministic at both backup time and display time.
     static func archiveURL(baseDir: URL, account: IMAPAccount, mboxFilename: String, offset: Int64) -> URL {
-        let base = mboxFilename.replacingOccurrences(of: ".mbox", with: "")
-        return archiveDir(baseDir: baseDir, account: account)
-            .appendingPathComponent("\(base)_\(offset).eml")
+        archiveDir(baseDir: baseDir, account: account)
+            .appendingPathComponent("\(archiveBaseName(mboxFilename))_\(offset).eml")
+    }
+
+    /// « INBOX_2026-08.mbox » → « INBOX_2026-08 ». Seule l'extension tombe : un
+    /// `replacingOccurrences(of: ".mbox")` mangeait aussi un « .mbox » présent au milieu
+    /// du nom du dossier, et deux dossiers distincts se retrouvaient sur le même fichier.
+    static func archiveBaseName(_ mboxFilename: String) -> String {
+        mboxFilename.hasSuffix(".mbox") ? String(mboxFilename.dropLast(5)) : mboxFilename
     }
 
     static func accountDir(baseDir: URL, account: IMAPAccount) -> URL {
@@ -319,8 +325,14 @@ struct MboxStore {
     // MARK: - Helpers
 
     static func extractSender(from data: Data) -> String {
-        let preview = data.prefix(8192)
-        let text = String(data: preview, encoding: .utf8) ?? ""
+        let preview = Data(data.prefix(8192))
+        // Repli latin-1 : les en-têtes ne sont pas toujours de l'UTF-8 valide (vieux
+        // courriers en ISO-8859-1), et la coupure à 8 Ko peut tomber au milieu d'un
+        // caractère multi-octets. Sans repli, tout mail concerné perdait son expéditeur
+        // et sa ligne « From » mbox portait « unknown@unknown ».
+        let text = String(data: preview, encoding: .utf8)
+            ?? String(data: preview, encoding: .isoLatin1)
+            ?? ""
         for line in text.components(separatedBy: "\n") {
             let lower = line.lowercased()
             if lower.hasPrefix("from:") {

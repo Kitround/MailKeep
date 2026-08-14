@@ -156,7 +156,9 @@ struct AccountSettingsView: View {
                 let client = IMAPClient()
                 try await client.connect(host: account.host, port: account.port)
                 try await client.login(username: account.username, password: password)
-                try await client.logout()
+                // Le test porte sur le serveur et les identifiants, tous deux validés à ce
+                // stade : un LOGOUT qui échoue annonçait « échec » pour une connexion bonne.
+                try? await client.logout()
                 await MainActor.run {
                     testResult = "Connexion réussie"
                     testSuccess = true

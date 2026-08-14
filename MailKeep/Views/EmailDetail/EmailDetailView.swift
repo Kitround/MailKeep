@@ -10,11 +10,16 @@ struct EmailDetailView: View {
     @State private var exportError: String? = nil
     @State private var showArchived = false
     @State private var archivedHTML: String? = nil
+    /// Résolue une fois par message, hors du corps de la vue : le test d'existence
+    /// tournait à chaque rendu, et sur le main actor.
+    @State private var archivedFileURL: URL? = nil
 
     /// Path to the self-contained .eml archive for this message, if it exists.
-    private var archivedFileURL: URL? {
+    /// Le nom de base vient de `MboxStore`, seul endroit qui décide comment une archive
+    /// s'appelle — recopié ici, il avait déjà divergé sur les noms contenant « .mbox ».
+    nonisolated private static func archiveURL(for email: EmailMessage) -> URL? {
         guard let mbox = email.mboxFileURL, email.mboxLength > 0 else { return nil }
-        let base = mbox.lastPathComponent.replacingOccurrences(of: ".mbox", with: "")
+        let base = MboxStore.archiveBaseName(mbox.lastPathComponent)
         let url = mbox.deletingLastPathComponent()
             .appendingPathComponent("archive")
             .appendingPathComponent("\(base)_\(email.mboxOffset).eml")
@@ -38,6 +43,13 @@ struct EmailDetailView: View {
             allowRemoteContent = false
             showArchived = false
             archivedHTML = nil
+            // Remise à zéro immédiate : la tâche qui la recalcule s'exécute une frame plus
+            // tard, et d'ici là « Copie archivée » aurait ouvert celle du message précédent.
+            archivedFileURL = nil
+        }
+        .task(id: email.id) {
+            let email = email
+            archivedFileURL = await Task.detached { Self.archiveURL(for: email) }.value
         }
         .task(id: "\(email.id)-\(showArchived)") {
             guard showArchived, archivedHTML == nil, let url = archivedFileURL else { return }
@@ -84,15 +96,22 @@ struct EmailDetailView: View {
     // MARK: - Export
 
     private func exportEML() {
-        // Récupère les données brutes du message (RFC 822 complet, pièces jointes incluses)
-        let data: Data?
-        if let url = email.mboxFileURL, email.mboxLength > 0 {
-            data = try? MboxStore.readMessage(at: email.mboxOffset, length: email.mboxLength, from: url)
-        } else {
-            data = email.rawData
+        Task {
+            // Lecture hors du main actor : un message à grosses pièces jointes fige
+            // l'interface le temps de relire son bloc dans le mbox.
+            let email = email
+            let data: Data? = await Task.detached {
+                if let url = email.mboxFileURL, email.mboxLength > 0 {
+                    return try? MboxStore.readMessage(at: email.mboxOffset, length: email.mboxLength, from: url)
+                }
+                return email.rawData
+            }.value
+            guard let emlData = data, !emlData.isEmpty else { return }
+            presentExportPanel(for: emlData)
         }
-        guard let emlData = data, !emlData.isEmpty else { return }
+    }
 
+    private func presentExportPanel(for emlData: Data) {
         let safeName = email.subject
             .components(separatedBy: CharacterSet(charactersIn: "/\\?%*:|\"<>"))
             .joined(separator: "_")
