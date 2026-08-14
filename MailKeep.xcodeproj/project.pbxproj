@@ -33,6 +33,7 @@
 		8AD804322F96670800ADD8BA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA01BB02CC03DD04EE05FF06 /* Assets.xcassets */; };
 		8AD804342F96670800ADD8BA /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 8AD804312F96670800ADD8BA /* AppIcon.icon */; };
 		90586F6D9DA1BB4872ED8BE4 /* EmailParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D271ACA03CBE7B4FBC20ACD /* EmailParser.swift */; };
+		9278997A0236B0315FAAD03A /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5525DB60E3EC31574AFCA81C /* MenuBarView.swift */; };
 		92C443C9BF6428D48B815C4B /* BackupRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEDBB8AD86B3A93DCC0039AC /* BackupRecord.swift */; };
 		9EDEE401057232F7AD3614AB /* SchedulerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2200602ABF1CCF81008805 /* SchedulerService.swift */; };
 		A1B2C3D400000000000000A2 /* DemoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000000A1 /* DemoSeeder.swift */; };
@@ -65,6 +66,7 @@
 		4D271ACA03CBE7B4FBC20ACD /* EmailParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailParser.swift; sourceTree = "<group>"; };
 		4FC361D90D8365EA289ED998 /* MailKeep.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MailKeep.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		52ADAD7BF5573F2E097DB114 /* MailKeep.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MailKeep.entitlements; sourceTree = "<group>"; };
+		5525DB60E3EC31574AFCA81C /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		6C41FA273F43D623AF0DB5F3 /* RestoreMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreMessageView.swift; sourceTree = "<group>"; };
 		73BFCC668CF1B8FD7080362C /* StateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateStore.swift; sourceTree = "<group>"; };
 		7B6D60924C37AF4CAB8909D1 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
@@ -110,6 +112,7 @@
 		183F6EB1E6ED72AD0A6F0359 /* MenuBar */ = {
 			isa = PBXGroup;
 			children = (
+				5525DB60E3EC31574AFCA81C /* MenuBarView.swift */,
 			);
 			path = MenuBar;
 			sourceTree = "<group>";
@@ -368,6 +371,7 @@
 				F441A14447FF31E29772B60B /* MailKeepApp.swift in Sources */,
 				3CE0F2E28C9B08D29D5519A8 /* MboxStore.swift in Sources */,
 				A1B2C3D400000000000000B2 /* MessageArchiver.swift in Sources */,
+				9278997A0236B0315FAAD03A /* MenuBarView.swift in Sources */,
 				7A6E87028C4EBC4D567986BF /* ProgressDetailView.swift in Sources */,
 				7B385408D3D3EDA5747E1D63 /* RestoreMessageView.swift in Sources */,
 				BA3EC3D279F2769AE7AE6A04 /* RestoreView.swift in Sources */,

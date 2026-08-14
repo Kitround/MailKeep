@@ -28,6 +28,7 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 - **Restore** entire folders or individual messages back to any IMAP server, original `INTERNALDATE` preserved.
 - **Import** existing `.mbox` files from Apple Mail / Thunderbird / other backups.
 - **Scheduled backups** per account (15 min → 7 days).
+- **Menu-bar companion**: live per-folder progress, one-click "Back up all", and a way back to the window from anywhere.
 - **Passwords stored in the macOS Keychain**, never in plaintext.
 - **App Sandbox** enabled, minimal entitlements (network client + user-selected files only).
 - **Read-only on the server**: backup uses `BODY.PEEK[]` and never sets the `\Seen` flag.

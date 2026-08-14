@@ -42,6 +42,20 @@ struct MailKeepApp: App {
             }
         }
 
+        // Libellé volontairement figé : le faire dépendre de l'état abonnerait le corps de
+        // l'App à `objectWillChange`, ce que `@State` ci-dessus existe précisément pour
+        // éviter — toute la scène, barre de menus comprise, serait reconstruite à chaque
+        // écriture de progression. L'état vit dans le panneau, qui l'observe seul.
+        MenuBarExtra("MailKeep", systemImage: "tray.and.arrow.down") {
+            MenuBarView()
+                .environmentObject(appState)
+                .environmentObject(backupEngine)
+        }
+        // `.window` et non le style `.menu` par défaut : ce dernier construit un vrai
+        // `NSMenu`, dont les mises à jour synchrones et ré-entrantes récursaient jusqu'au
+        // débordement de pile dès qu'un backup écrivait sa progression.
+        .menuBarExtraStyle(.window)
+
         Settings {
             AppSettingsView()
                 .environmentObject(appState)
