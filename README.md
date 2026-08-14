@@ -37,7 +37,7 @@ Direct IMAP/TLS connection on port 993, incremental backups, full local archive 
 
 ## Installation
 
-1. Download **[`MailKeep-1.9.0.zip`](https://github.com/Kitround/MailKeep/releases/latest)** from the latest release.
+1. Download **[`MailKeep-1.9.1.zip`](https://github.com/Kitround/MailKeep/releases/latest)** from the latest release.
 2. Unzip and move `MailKeep.app` into `/Applications`.
 3. First launch: right-click → **Open** to bypass Gatekeeper (the app is signed ad-hoc, not notarised).
 4. Pick a backup folder when prompted — this is where `.mbox` files will be written.
