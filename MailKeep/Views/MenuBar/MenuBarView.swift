@@ -22,7 +22,9 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             status
-                .padding(.horizontal, 12)
+                // Même retrait que le contenu d'une ligne d'action, pour que le glyphe
+                // d'état tombe sur la verticale des glyphes des boutons.
+                .padding(.horizontal, MenuBarMetrics.rowPadding + MenuBarMetrics.contentInset)
                 .padding(.vertical, 10)
 
             Divider()
@@ -46,7 +48,7 @@ struct MenuBarView: View {
                     NSApp.terminate(nil)
                 }
             }
-            .padding(6)
+            .padding(MenuBarMetrics.rowPadding)
         }
         .frame(width: 260)
     }
@@ -56,22 +58,15 @@ struct MenuBarView: View {
     @ViewBuilder
     private var status: some View {
         if appState.isRunningBackup {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(appState.activeProgress.values)) { progress in
                     VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text(progress.folderName)
-                                .font(.caption.weight(.medium))
-                                .lineLimit(1)
-                            Spacer(minLength: 4)
-                            if progress.total > 0 {
-                                Text("\(progress.current)/\(progress.total)")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        Text(progress.folderName)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
                         // Barre déterminée quand le total est connu, indéterminée pendant
-                        // la connexion et la récupération des UIDs.
+                        // la connexion et la récupération des UIDs. L'avancement se lit
+                        // sur la barre — le compteur chiffré doublait l'information.
                         if progress.total > 0 {
                             ProgressView(value: progress.percentComplete)
                                 .controlSize(.small)
@@ -85,10 +80,8 @@ struct MenuBarView: View {
                 }
             }
         } else {
-            HStack(spacing: 6) {
-                Image(systemName: lastRunSymbol.name)
-                    .foregroundStyle(lastRunSymbol.color)
-                    .font(.caption)
+            HStack(spacing: MenuBarMetrics.iconGap) {
+                MenuBarIcon(systemName: lastRunSymbol.name, color: lastRunSymbol.color)
                 lastBackupLabel
                 Spacer(minLength: 0)
             }
@@ -107,7 +100,9 @@ struct MenuBarView: View {
     @ViewBuilder
     private var lastBackupLabel: some View {
         if let last = appState.backupRuns.last, let finished = last.finishedAt {
-            (Text("Dernier backup ") + Text(finished, style: .relative) + Text(" plus tôt"))
+            // `.relative` rend déjà une durée écoulée (« 2 j et 23 h ») : la faire suivre
+            // de « plus tôt » donnait « 2 j et 23 h plus tôt ».
+            (Text("Dernier backup il y a ") + Text(finished, style: .relative))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -116,6 +111,45 @@ struct MenuBarView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+// MARK: - Métriques
+
+/// Mesures partagées du panneau. Elles existent pour une seule raison : toutes les icônes
+/// doivent tomber sur la même verticale et faire la même taille, ce qu'aucune valeur posée
+/// ligne par ligne ne garantissait.
+private enum MenuBarMetrics {
+    /// Marge du bloc d'actions.
+    static let rowPadding: CGFloat = 6
+    /// Marge interne d'une ligne d'action. Additionnée à `rowPadding`, elle donne le retrait
+    /// du glyphe — le même que celui du bloc d'état, qui n'est pas dans une ligne.
+    static let contentInset: CGFloat = 8
+    /// Écart entre le glyphe et son libellé.
+    static let iconGap: CGFloat = 8
+    /// Corps du glyphe.
+    static let iconSize: CGFloat = 13
+    /// Boîte carrée commune. Les symboles SF n'ont pas la même largeur intrinsèque —
+    /// « macwindow » fait 18 pt de large, « power » 15 — donc sans cadre imposé leurs
+    /// centres ne tombent pas au même endroit et les libellés partent en escalier.
+    static let iconBox: CGFloat = 18
+}
+
+/// Glyphe du panneau : même corps et même boîte pour tous, d'où l'alignement.
+///
+/// Sans `color`, aucune teinte n'est posée et le glyphe hérite de celle de son parent —
+/// c'est ce qui fait passer l'icône d'une action désactivée en tertiaire avec son libellé.
+private struct MenuBarIcon: View {
+    let systemName: String
+    var color: Color? = nil
+
+    var body: some View {
+        let glyph = Image(systemName: systemName)
+            .font(.system(size: MenuBarMetrics.iconSize))
+        Group {
+            if let color { glyph.foregroundStyle(color) } else { glyph }
+        }
+        .frame(width: MenuBarMetrics.iconBox, height: MenuBarMetrics.iconBox)
     }
 }
 
@@ -141,13 +175,14 @@ private struct MenuBarButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: systemImage)
-                    .frame(width: 16)
+            HStack(spacing: MenuBarMetrics.iconGap) {
+                // Pas de couleur imposée : le glyphe suit le `foregroundStyle` de la ligne,
+                // qui passe en tertiaire quand l'action est désactivée.
+                MenuBarIcon(systemName: systemImage, color: nil)
                 Text(title)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, MenuBarMetrics.contentInset)
             .padding(.vertical, 5)
             .contentShape(Rectangle())
             .background(
