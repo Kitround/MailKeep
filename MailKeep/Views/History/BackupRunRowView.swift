@@ -5,7 +5,7 @@ struct BackupRunRowView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var backupEngine: BackupEngine
 
-    /// Progression en cours pour ce dossier précis
+    /// Progress currently running for this exact folder
     private var activeProgress: BackupProgress? {
         appState.activeProgress.values.first {
             $0.accountID == run.accountID && $0.folderName == run.folderName
@@ -14,7 +14,7 @@ struct BackupRunRowView: View {
 
     private var isBacking: Bool { activeProgress != nil }
 
-    /// Retrouve le compte et le dossier correspondant au run
+    /// Finds the account and folder this run belongs to
     private var accountAndFolder: (IMAPAccount, MailFolder)? {
         guard let account = appState.accounts.first(where: { $0.id == run.accountID }),
               let folder  = account.folders.first(where: { $0.name == run.folderName })
@@ -28,7 +28,7 @@ struct BackupRunRowView: View {
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 4) {
-                // Ligne 1 : dossier + compte + date
+                // Row 1: folder + account + date
                 HStack(alignment: .firstTextBaseline) {
                     Text(run.folderName)
                         .font(.headline)
@@ -44,14 +44,14 @@ struct BackupRunRowView: View {
                         .monospacedDigit()
                 }
 
-                // Ligne 2 : stats + bouton reprendre
+                // Row 2: stats + resume button
                 HStack(spacing: 10) {
                     statsLine
                     Spacer(minLength: 0)
                     resumeButton
                 }
 
-                // Ligne 3 : erreur si présente
+                // Row 3: error when there is one
                 if let error = run.errorMessage {
                     Text(error)
                         .font(.caption)

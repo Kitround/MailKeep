@@ -18,7 +18,7 @@ struct EmailListView: View {
     var body: some View {
         Group {
             if loader.visibleEmails.isEmpty && isFolderBacking {
-                // Backup en cours et rien à afficher encore
+                // Backup running and nothing to show yet
                 VStack(spacing: 12) {
                     ProgressView()
                     Text("Backup en cours…")

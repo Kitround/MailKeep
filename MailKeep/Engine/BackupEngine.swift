@@ -11,20 +11,19 @@ final class BackupEngine: ObservableObject {
     /// Keys of folders where a stop has been requested (accountID|folderName)
     private var stopRequested: Set<String> = []
 
-    /// Dernière publication de chaque progression, pour la limiter dans le temps.
+    /// Last publication time of each progress, used to rate-limit it.
     private var lastProgressPublish: [UUID: Date] = [:]
     private static let progressPublishInterval: TimeInterval = 0.2
 
-    /// Écrit la progression dans `AppState` — au plus 5 fois par seconde.
+    /// Writes progress into `AppState` — at most 5 times a second.
     ///
-    /// `activeProgress` est `@Published` : chaque écriture invalide tout ce qui l'observe.
-    /// Écrite à chaque message (des dizaines par seconde), elle poussait la mise à jour de
-    /// menu de macOS, synchrone et ré-entrante, à se rappeler elle-même sans fin :
-    /// `menuNeedsUpdate → render → menuNeedsUpdate → …` jusqu'au débordement de pile
-    /// (SIGSEGV sur la stack guard).
+    /// `activeProgress` is `@Published`: every write invalidates everything observing it.
+    /// Written once per message (dozens per second), it drove macOS menu updates — which
+    /// are synchronous and re-entrant — to call themselves endlessly:
+    /// `menuNeedsUpdate → render → menuNeedsUpdate → …` until the stack overflowed
+    /// (SIGSEGV on the stack guard).
     ///
-    /// `force` pour les transitions de phase et les états terminaux, qui doivent
-    /// s'afficher immédiatement.
+    /// `force` for phase transitions and terminal states, which must show immediately.
     private func publish(_ progress: BackupProgress, force: Bool = false) {
         guard let state = appState else { return }
         let now = Date()
@@ -52,9 +51,9 @@ final class BackupEngine: ObservableObject {
 
     // MARK: - Public API
 
-    /// Lance les comptes activés en parallèle, mais leurs dossiers l'un après l'autre :
-    /// chaque dossier ouvre sa propre connexion IMAP et les serveurs plafonnent le nombre
-    /// de connexions simultanées par compte (Posteo ~10, Gmail 15).
+    /// Runs enabled accounts in parallel, but their folders one after another: each folder
+    /// opens its own IMAP connection and servers cap how many an account may hold at once
+    /// (Posteo ~10, Gmail 15).
     func backupAll() async {
         guard let state = appState else { return }
         var succeededAccounts: Set<UUID> = []
@@ -72,8 +71,8 @@ final class BackupEngine: ObservableObject {
                 succeededAccounts.insert(accountID)
             }
         }
-        // lastBackupDate uniquement si au moins un dossier a réussi — un backup
-        // planifié qui échoue (serveur down, mot de passe) sera retenté au prochain tick.
+        // lastBackupDate only if at least one folder succeeded — a scheduled backup that
+        // fails (server down, bad password) is retried on the next tick.
         guard let state = appState else { return }
         for account in state.accounts where succeededAccounts.contains(account.id) {
             var updated = account
@@ -82,8 +81,8 @@ final class BackupEngine: ObservableObject {
         }
     }
 
-    /// Lance les dossiers d'un compte l'un après l'autre — une seule connexion IMAP
-    /// ouverte à la fois vers ce serveur.
+    /// Runs an account's folders one after another — a single IMAP connection open to
+    /// that server at a time.
     func backupAccount(_ account: IMAPAccount) async {
         var anySuccess = false
         for folder in account.folders where folder.isEnabled {
@@ -100,16 +99,16 @@ final class BackupEngine: ObservableObject {
     func backupFolder(account: IMAPAccount, folder: MailFolder) async -> Bool {
         guard let state = appState, let baseURL = state.backupBaseURL else { return false }
 
-        // Un même dossier peut être lancé depuis la barre de menu, la fenêtre, ⌘⇧B et le
-        // planificateur. Deux exécutions simultanées écrivaient le même .mbox et le même
-        // index JSON en parallèle — index corrompu et messages en double.
+        // The same folder can be started from the menu bar, the window, ⌘⇧B and the
+        // scheduler. Two concurrent runs wrote the same .mbox and the same JSON index in
+        // parallel — corrupted index and duplicated messages.
         let alreadyRunning = state.activeProgress.values.contains {
             $0.accountID == account.id && $0.folderName == folder.name
         }
         guard !alreadyRunning else { return false }
 
-        // Un Stop demandé hors de la boucle (pendant la connexion, le flush final, ou sur
-        // un run qui a échoué) restait armé et arrêtait le run suivant au premier message.
+        // A Stop requested outside the loop (during connect, the final flush, or on a run
+        // that failed) stayed armed and stopped the next run on its first message.
         stopRequested.remove(stopKey(account.id, folder.name))
 
         var progress = BackupProgress(
@@ -154,7 +153,7 @@ final class BackupEngine: ObservableObject {
             publish(progress, force: true)
             let folderStatus = try await client.selectFolder(folder.name)
 
-            // UID validity check — si le serveur a réassigné les UIDs, reset complet
+            // UID validity check — if the server reassigned UIDs, wipe and start over
             var folderState = stateStore.load(accountID: account.id, folderName: folder.name)
             if let existing = folderState,
                existing.uidValidity != folderStatus.uidValidity,
@@ -166,10 +165,9 @@ final class BackupEngine: ObservableObject {
             progress.phase = .fetchingUIDList
             publish(progress, force: true)
 
-            // On récupère les UIDs correspondant au filtre du compte (par défaut SEEN
-            // pour rétrocompat), puis on filtre localement avec knownUIDs. UID SEARCH
-            // ne télécharge pas les messages — juste une liste d'UIDs, rapide même
-            // sur 20 000 messages.
+            // Fetch the UIDs matching the account's filter (SEEN by default, for
+            // backwards compatibility), then filter locally against knownUIDs. UID SEARCH
+            // downloads no messages — just a list of UIDs, fast even over 20 000 of them.
             let knownUIDs = folderState?.backedUpUIDs ?? []
             let serverUIDs = try await client.fetchAllUIDs(filter: account.messageFilter)
             let toFetch = serverUIDs.filter { !knownUIDs.contains($0) }
@@ -182,8 +180,8 @@ final class BackupEngine: ObservableObject {
             var bytesWritten: Int64 = 0
             let idxURL = MboxStore.indexURL(baseDir: baseURL, account: account, folderName: folder.name)
             let indexStore = EmailIndexStore(indexURL: idxURL)
-            // Index gardé en mémoire pendant tout le run — l'ancien append() relisait
-            // et réécrivait le JSON complet à chaque flush (O(n²) sur les gros dossiers).
+            // Index held in memory for the whole run — the old append() re-read and
+            // rewrote the entire JSON on every flush (O(n²) on large folders).
             var indexEntries = toFetch.isEmpty ? [] : indexStore.load()
             var newEntriesSinceFlush = 0
             var archiveJobs: [ArchiveJob] = []
@@ -209,8 +207,8 @@ final class BackupEngine: ObservableObject {
                     baseDir: baseURL, account: account,
                     folderName: folder.name, year: year, month: month
                 )
-                // Écriture mbox + parsing des en-têtes hors du main actor : sur un mail
-                // à grosses pièces jointes, les faire ici gelait l'interface.
+                // mbox write + header parsing off the main actor: on a message with large
+                // attachments, doing them here froze the interface.
                 let written = try await Task.detached(priority: .userInitiated) {
                     try Self.writeMessage(msg.rfc822, internalDate: msg.internalDate, to: mboxURL)
                 }.value
@@ -252,7 +250,7 @@ final class BackupEngine: ObservableObject {
                 }
             }
 
-            // Flush restant
+            // Remaining flush
             if newEntriesSinceFlush > 0 {
                 try await save(indexEntries, to: indexStore)
             }
@@ -420,9 +418,9 @@ final class BackupEngine: ObservableObject {
             }
         }
 
-        // L'index n'est jeté que si quelque chose est réellement entré : il se reconstruit
-        // à la prochaine ouverture du dossier, mais un import entièrement raté n'a aucune
-        // raison de faire payer ce parcours complet.
+        // The index is only dropped when something actually landed: it rebuilds on the
+        // next folder open, but an import that failed outright has no reason to make the
+        // user pay for that full pass.
         if importedCount > 0 {
             try? FileManager.default.removeItem(at: idxURL)
         }
@@ -453,8 +451,8 @@ final class BackupEngine: ObservableObject {
         publish(progress, force: true)
 
         do {
-            // Positions seules : le contenu est relu message par message, un mbox de
-            // plusieurs gigaoctets ne doit jamais tenir en mémoire d'un bloc.
+            // Offsets only: content is re-read one message at a time, a multi-gigabyte
+            // mbox must never sit in memory as a single block.
             let ranges = try await Task.detached { try MboxStore.messageRanges(in: mboxURL) }.value
             progress.total = ranges.count
             publish(progress, force: true)
@@ -469,8 +467,8 @@ final class BackupEngine: ObservableObject {
             try await client.login(username: account.username, password: password)
 
             progress.phase = .downloadingMessages
-            // Un message refusé par le serveur ne doit pas interrompre tout le restore.
-            // En revanche, des échecs consécutifs (connexion morte) font abandonner.
+            // One message refused by the server must not abort the whole restore.
+            // Consecutive failures (dead connection) do make it give up.
             var failedCount = 0
             var consecutiveFailures = 0
             for (i, range) in ranges.enumerated() {
@@ -492,9 +490,9 @@ final class BackupEngine: ObservableObject {
                 }
             }
 
-            // `try?` : tous les messages sont déjà déposés sur le serveur à ce stade.
-            // Un LOGOUT qui échoue (connexion coupée par le serveur juste après) faisait
-            // basculer en « échec » une restauration entièrement réussie.
+            // `try?`: every message is already on the server by this point. A failing
+            // LOGOUT (server dropping the connection right after) flipped a fully
+            // successful restore to "failed".
             try? await client.logout()
             progress.phase = .done
             if failedCount > 0 {
@@ -608,8 +606,8 @@ final class BackupEngine: ObservableObject {
 
         try? fm.removeItem(at: idxURL)
 
-        // Correspondance stricte, pas un simple préfixe : « INBOX » ne doit pas emporter
-        // les fichiers de « INBOX/Travail » (assaini en « INBOX_Travail ») ni de « INBOXOLD ».
+        // Strict match, not a bare prefix: "INBOX" must not carry off the files of
+        // "INBOX/Travail" (sanitised to "INBOX_Travail") nor those of "INBOXOLD".
         if let contents = try? fm.contentsOfDirectory(at: accountDir, includingPropertiesForKeys: nil) {
             for url in contents where MboxStore.isMbox(url.lastPathComponent, ofFolder: safeFolder) {
                 try? fm.removeItem(at: url)
@@ -638,7 +636,7 @@ final class BackupEngine: ObservableObject {
         "\(accountID)|\(folderName)"
     }
 
-    /// Écriture mbox + lecture des en-têtes, exécutées hors du main actor.
+    /// mbox write + header read, both executed off the main actor.
     private struct WrittenMessage: Sendable {
         let offset: Int64
         let length: Int
@@ -666,8 +664,8 @@ final class BackupEngine: ObservableObject {
         )
     }
 
-    /// Toujours appelé, même avec un lot vide : c'est ce qui persiste l'UIDVALIDITY
-    /// d'un dossier déjà à jour, sans quoi le run suivant re-télécharge tout.
+    /// Always called, even with an empty batch: this is what persists the UIDVALIDITY of
+    /// an already up-to-date folder, without which the next run re-downloads everything.
     private func flushUIDs(_ uids: Set<UInt32>, account: IMAPAccount,
                            folder: MailFolder, uidValidity: UInt32) async throws {
         let store = stateStore

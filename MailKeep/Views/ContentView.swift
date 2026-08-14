@@ -1,19 +1,19 @@
 import SwiftUI
 import AppKit
 
-/// Fige la largeur de la colonne des comptes, par une contrainte Auto Layout posée sur la
-/// colonne elle-même.
+/// Pins the width of the account column with an Auto Layout constraint on the column
+/// itself.
 ///
-/// La colonne reste une colonne du split view : c'est d'elle que la fenêtre tire le
-/// `sidebarTrackingSeparator` de sa barre d'outils, donc la position des icônes au-dessus
-/// de la sidebar et le titre au-dessus de la colonne du milieu. Sortie du split, tout ce
-/// décor part avec elle.
+/// The column stays a split view column: it is what gives the window the
+/// `sidebarTrackingSeparator` in its toolbar, and with it the position of the icons above
+/// the sidebar and the title above the middle column. Taken out of the split, all of that
+/// chrome goes with it.
 ///
-/// La contrainte est posée sur la vue de colonne, pas sur le `NSSplitViewItem` : les
-/// épaisseurs de l'item meurent avec lui quand SwiftUI reconstruit ses colonnes, la
-/// contrainte, elle, vit aussi longtemps que la colonne. Rien à reposer en continu, donc
-/// rien qui lutte contre la passe de mise en page d'AppKit — et une contrainte requise ne
-/// laisse aucun jeu au séparateur ni à une géométrie restaurée au lancement.
+/// The constraint sits on the column view, not on the `NSSplitViewItem`: the item's
+/// thicknesses die with it whenever SwiftUI rebuilds its columns, while the constraint
+/// lives as long as the column does. Nothing to reapply continuously, so nothing fighting
+/// AppKit's layout pass — and a required constraint leaves the divider no slack, nor does
+/// it leave any to geometry restored at launch.
 private struct ColumnWidthLock: NSViewRepresentable {
     let width: CGFloat
 
@@ -35,11 +35,11 @@ private struct ColumnWidthLock: NSViewRepresentable {
             guard let nsView else { return }
             Self.apply(width: width, from: nsView)
         }
-        // Quand SwiftUI reconstruit ses colonnes — ce que fait chaque rafraîchissement de
-        // l'historique en plein backup — la nouvelle colonne repart sans contrainte, et
-        // `updateNSView` n'est pas rappelé puisque la largeur n'a pas changé. On ré-attache
-        // donc après chaque passe de redimensionnement : différé pour ne rien écrire pendant
-        // la passe d'AppKit, et sans effet quand la contrainte est déjà en place.
+        // When SwiftUI rebuilds its columns — which every history refresh mid-backup does
+        // — the new column starts with no constraint, and `updateNSView` is not called
+        // again because the width has not changed. So the constraint is re-attached after
+        // each resize pass: deferred, to write nothing during AppKit's own pass, and a
+        // no-op when the constraint is already in place.
         if coordinator.observer == nil {
             coordinator.observer = NotificationCenter.default.addObserver(
                 forName: NSSplitView.didResizeSubviewsNotification,
@@ -48,7 +48,7 @@ private struct ColumnWidthLock: NSViewRepresentable {
                 DispatchQueue.main.async { coordinator?.apply?() }
             }
         }
-        // Différé : à l'appel, la vue n'est pas encore dans la hiérarchie du split view.
+        // Deferred: at call time the view is not in the split view hierarchy yet.
         DispatchQueue.main.async { coordinator.apply?() }
     }
 
@@ -59,8 +59,8 @@ private struct ColumnWidthLock: NSViewRepresentable {
         }
         guard let column = candidate, let split = column.superview as? NSSplitView else { return }
 
-        // `>=` et non `==` : la colonne peut être élargie au séparateur, jamais rétrécie
-        // sous la largeur de son contenu — ni par un drag, ni par une géométrie restaurée.
+        // `>=` rather than `==`: the column can be widened at the divider, but never
+        // squeezed under its content width — not by a drag, not by restored geometry.
         if let existing = column.constraints.first(where: { $0.identifier == identifier }) {
             if existing.constant != width { existing.constant = width }
         } else {
@@ -69,7 +69,7 @@ private struct ColumnWidthLock: NSViewRepresentable {
             lock.isActive = true
         }
 
-        // Sans ça, la colonne reste repliable par le menu Présentation.
+        // Without this the column stays collapsible from the View menu.
         if let controller = split.delegate as? NSSplitViewController,
            let index = split.arrangedSubviews.firstIndex(of: column),
            controller.splitViewItems.indices.contains(index) {
@@ -83,14 +83,14 @@ struct ContentView: View {
     @EnvironmentObject var backupEngine: BackupEngine
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
-    /// Largeur de la colonne des comptes : celle de son contenu, loader et icône compris.
+    /// Width of the account column: that of its content, loader and icon included.
     private var sidebarWidth: CGFloat { SidebarMetrics.width(for: appState.accounts) }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
-                // Largeur de départ ; ensuite c'est le verrou ci-dessous qui borne le
-                // plancher, le séparateur reste libre vers la droite.
+                // Starting width; from then on the lock below bounds the floor, and the
+                // divider stays free to move right.
                 .navigationSplitViewColumnWidth(min: sidebarWidth, ideal: sidebarWidth, max: 700)
                 .background(ColumnWidthLock(width: sidebarWidth))
                 .toolbar(removing: .sidebarToggle)
@@ -122,7 +122,7 @@ struct ContentView: View {
         .onChange(of: appState.selectedFolderID) { _, _ in
             appState.selectedEmail = nil
         }
-        // Empêche la sidebar d'être réduite via raccourci clavier ou menu View
+        // Stops the sidebar being collapsed from a keyboard shortcut or the View menu
         .onChange(of: columnVisibility) { _, v in
             if v != .all { columnVisibility = .all }
         }

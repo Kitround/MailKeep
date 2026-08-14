@@ -16,7 +16,7 @@ final class EmailLoader: ObservableObject {
     var isSearching: Bool { !searchQuery.isEmpty }
 
     private var loadedURLs: [URL] = []
-    private var loadGeneration = 0          // incrémenté à chaque reload — évite les mises à jour stales
+    private var loadGeneration = 0          // bumped on every reload — keeps stale updates out
     private var loadTask: Task<Void, Never>? = nil
     private var searchTask: Task<Void, Never>? = nil
 
@@ -39,14 +39,14 @@ final class EmailLoader: ObservableObject {
         visibleCount = EmailLoader.pageSize
         error = nil
 
-        // Vider uniquement si changement de dossier — sinon garder l'affichage pendant le reload
+        // Clear only when the folder changed — otherwise keep what is on screen during the reload
         if folderChanged || mboxURLs.isEmpty {
             allEmails = []
             visibleEmails = []
             totalCount = 0
         }
 
-        // Rien à charger
+        // Nothing to load
         guard !mboxURLs.isEmpty else {
             isLoading = false
             return
@@ -64,7 +64,7 @@ final class EmailLoader: ObservableObject {
                     generation: generation
                 )
             } catch {
-                // Tâche annulée ou erreur inattendue — nettoyer
+                // Cancelled task or unexpected error — clean up
                 await MainActor.run { [weak self] in
                     guard let self, self.loadGeneration == generation else { return }
                     if !(error is CancellationError) {
@@ -135,12 +135,12 @@ final class EmailLoader: ObservableObject {
 
     // MARK: - Core load logic
 
-    /// `nonisolated` : sans ça la méthode héritait de l'isolation `@MainActor` de la classe,
-    /// et toute la reconstruction d'index — ouverture des fichiers, seek/read par message,
-    /// parsing des en-têtes — s'exécutait sur le main actor, gelant l'interface le temps
-    /// de parcourir le dossier. Chaque accès à `self` passe déjà par `MainActor.run`.
+    /// `nonisolated`: without it the method inherited the class's `@MainActor` isolation,
+    /// and the whole index rebuild — opening files, seek/read per message, header parsing —
+    /// ran on the main actor, freezing the interface for as long as the folder took to walk.
+    /// Every access to `self` already goes through `MainActor.run`.
     nonisolated private func performLoad(mboxURLs: [URL], indexURL: URL?, generation: Int) async throws {
-        // Fast path : index JSON disponible et non vide
+        // Fast path: a JSON index that exists and is not empty
         if let idxURL = indexURL {
             let entries = await Task.detached { EmailIndexStore(indexURL: idxURL).load() }.value
             if !entries.isEmpty {
@@ -156,7 +156,7 @@ final class EmailLoader: ObservableObject {
 
         try Task.checkCancellation()
 
-        // Slow path : construire l'index depuis les fichiers mbox
+        // Slow path: build the index from the mbox files
         let accountDir = mboxURLs.first?.deletingLastPathComponent()
         var allEntries: [EmailIndexEntry] = []
 
@@ -168,7 +168,7 @@ final class EmailLoader: ObservableObject {
             do {
                 ranges = try await Task.detached { try MboxStore.messageRanges(in: url) }.value
             } catch {
-                continue  // fichier illisible, on passe au suivant
+                continue  // unreadable file, move on to the next
             }
             guard !ranges.isEmpty else { continue }
 
@@ -203,7 +203,7 @@ final class EmailLoader: ObservableObject {
 
             allEntries.append(contentsOf: fileEntries)
 
-            // Publier les résultats partiels (newest-first dans chaque fichier, pas encore trié global)
+            // Publish partial results (newest-first within each file, not yet sorted globally)
             let partial = allEntries
             await MainActor.run { [weak self] in
                 guard let self, self.loadGeneration == generation else { return }
@@ -214,14 +214,14 @@ final class EmailLoader: ObservableObject {
 
         try Task.checkCancellation()
 
-        // Sauvegarder l'index pour les prochaines ouvertures
+        // Save the index for the next time the folder is opened
         if let idxURL = indexURL, !allEntries.isEmpty {
             let entriesToSave = allEntries
             Task.detached { try? EmailIndexStore(indexURL: idxURL).save(entriesToSave) }
         }
 
-        // Copie locale avant de traverser vers le main actor, comme les deux autres
-        // publications : capturer la `var` elle-même est une course en Swift 6.
+        // Local copy before crossing to the main actor, like the two other publications:
+        // capturing the `var` itself is a data race in Swift 6.
         let finalEntries = allEntries
         await MainActor.run { [weak self] in
             guard let self, self.loadGeneration == generation else { return }

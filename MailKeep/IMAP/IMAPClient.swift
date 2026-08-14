@@ -6,14 +6,14 @@ actor IMAPClient {
     private var receiveBuffer: Data = Data()
     private var tagCounter: Int = 1
     private let timeoutSeconds: TimeInterval = 30
-    /// Les literals ont leur propre plafond ; sans celui-ci, un serveur qui n'envoie
-    /// jamais de CRLF fait gonfler le tampon de ligne sans limite.
+    /// Literals have their own cap; without this one, a server that never sends a CRLF
+    /// grows the line buffer without bound.
     private let maxLineBytes = 8 * 1024 * 1024
     private var connectContinuation: CheckedContinuation<Void, Error>?
 
-    /// `logout()` ferme la connexion, mais aucun chemin d'erreur ne l'appelle : mot de
-    /// passe refusé, dossier introuvable, timeout… laissaient la socket ouverte jusqu'à
-    /// la fin du processus, et les échecs répétés atteignaient la limite du serveur.
+    /// `logout()` closes the connection, but no error path calls it: a refused password,
+    /// a missing folder, a timeout… all left the socket open until the process ended, and
+    /// repeated failures hit the server's connection limit.
     deinit { connection?.cancel() }
 
     // MARK: - Connect (IMAPS — TLS direct sur port 993)
@@ -183,7 +183,7 @@ actor IMAPClient {
 
     func fetchMessage(uid: UInt32) async throws -> FetchedMessage {
         let tag = nextTag()
-        // BODY.PEEK[] lit le contenu sans modifier le flag \Seen
+        // BODY.PEEK[] reads the content without touching the \Seen flag
         try await sendRaw("\(tag) UID FETCH \(uid) (FLAGS INTERNALDATE BODY.PEEK[])\r\n")
         let resp = try await awaitTagged(tag: tag)
 

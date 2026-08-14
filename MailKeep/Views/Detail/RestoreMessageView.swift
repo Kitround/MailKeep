@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Sheet permettant de restaurer un unique message vers un compte/dossier IMAP choisi.
+/// Sheet for restoring a single message to a chosen IMAP account and folder.
 struct RestoreMessageView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var backupEngine: BackupEngine
@@ -43,7 +43,7 @@ struct RestoreMessageView: View {
 
             Divider()
 
-            // Résumé du message
+            // Message summary
             GroupBox("Message à restaurer") {
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 5) {
                     if !email.from.isEmpty {
@@ -57,10 +57,10 @@ struct RestoreMessageView: View {
                 .padding(.top, 4)
             }
 
-            // Sélection destination
+            // Destination picker
             GroupBox("Destination IMAP") {
                 VStack(alignment: .leading, spacing: 10) {
-                    // Compte
+                    // Account
                     Picker("Compte", selection: $selectedAccountID) {
                         Text("Choisir un compte…").tag(Optional<UUID>.none)
                         ForEach(appState.accounts) { account in
@@ -69,11 +69,11 @@ struct RestoreMessageView: View {
                         }
                     }
                     .onChange(of: selectedAccountID) { _, _ in
-                        // Pré-sélectionner le premier dossier
+                        // Pre-select the first folder
                         selectedFolderName = selectedAccount?.folders.first?.name ?? ""
                     }
 
-                    // Dossier
+                    // Folder
                     Picker("Dossier", selection: $selectedFolderName) {
                         if availableFolders.isEmpty {
                             Text("—").tag("")
@@ -122,7 +122,7 @@ struct RestoreMessageView: View {
     // MARK: - Helpers
 
     private func preselect() {
-        // Pré-sélectionner le compte courant si possible
+        // Pre-select the current account when there is one
         if let account = appState.selectedAccount {
             selectedAccountID = account.id
             selectedFolderName = appState.selectedFolder?.name ?? account.folders.first?.name ?? ""

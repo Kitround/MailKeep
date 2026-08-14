@@ -41,11 +41,11 @@ struct FolderRowView: View {
             .contentShape(Rectangle())
             .onTapGesture { select() }
 
-            // Actions du dossier — mêmes entrées que la page de détail,
-            // accessibles même quand un email est ouvert.
-            // Bouton strictement identique à la roue crantée du compte (même label,
-            // même padding) : alignement et couleurs par construction. Un Menu SwiftUI
-            // ne convenait pas — son chrome décale le glyphe et le noircit en dark mode.
+            // Folder actions — the same entries as the detail page, reachable even while
+            // an email is open.
+            // A button strictly identical to the account's gear (same label, same padding),
+            // so alignment and colours come for free. A SwiftUI Menu would not do — its
+            // chrome offsets the glyph and turns it black in dark mode.
             Button {
                 NSMenu.popUpAtPointer(items: actionItems)
             } label: {
@@ -87,14 +87,14 @@ struct FolderRowView: View {
 
     // MARK: - Actions
 
-    /// Sélectionne le dossier et referme l'email ouvert, pour revenir à sa page d'actions.
+    /// Selects the folder and closes the open email, to come back to its action page.
     private func select() {
         appState.selectedAccountID = account.id
         appState.selectedFolderID = folder.id
         appState.selectedEmail = nil
     }
 
-    /// Source unique des actions : sert au menu du bouton « … » comme au clic droit.
+    /// Single source of the actions: feeds the "…" button's menu and the right-click menu alike.
     private var actionItems: [MenuAction] {
         let noBackupDir = appState.backupBaseURL == nil
         return [

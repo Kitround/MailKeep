@@ -11,7 +11,7 @@ final class AppState: ObservableObject {
     @Published var selectedEmail: EmailMessage? = nil
     @Published var backupBaseURL: URL? = nil
 
-    /// Plafond de l'historique, en mémoire comme sur disque.
+    /// History cap, in memory as well as on disk.
     private static let maxRuns = 500
     private let accountsKey = "mailkeep_accounts"
     private let runsKey = "mailkeep_runs"
@@ -49,8 +49,8 @@ final class AppState: ObservableObject {
         if let data = try? JSONEncoder().encode(accounts) {
             UserDefaults.standard.set(data, forKey: accountsKey)
         }
-        // Même plafond en mémoire que sur disque : seuls 500 runs étaient persistés, mais
-        // le tableau vivant, lui, grandissait sans fin sur une session longue.
+        // Same cap in memory as on disk: only 500 runs were ever persisted, but the live
+        // array grew without end over a long session.
         if backupRuns.count > Self.maxRuns {
             backupRuns.removeFirst(backupRuns.count - Self.maxRuns)
         }
@@ -76,10 +76,10 @@ final class AppState: ObservableObject {
         loadBackupBookmark()
     }
 
-    /// Un run enregistré sans `finishedAt` appartient à une exécution que l'app n'a pas
-    /// terminée (fermeture, crash, coupure). Rien ne le reprend au lancement suivant :
-    /// il restait « En cours… » indéfiniment dans l'historique, avec un spinner sans fin.
-    /// On le clôt comme interrompu — le bouton « Reprendre » de la ligne devient actif.
+    /// A run stored without `finishedAt` belongs to an execution the app never finished
+    /// (quit, crash, power loss). Nothing picks it up on the next launch: it stayed
+    /// "En cours…" in the history forever, with a spinner that never stopped. It is closed
+    /// as interrupted instead — which turns the row's "Reprendre" button back on.
     private func reconcileInterruptedRuns() {
         var changed = false
         for i in backupRuns.indices where backupRuns[i].finishedAt == nil {
@@ -110,11 +110,11 @@ final class AppState: ObservableObject {
     func removeAccount(_ account: IMAPAccount) {
         accounts.removeAll { $0.id == account.id }
         backupRuns.removeAll { $0.accountID == account.id }
-        // Sans ça le mot de passe IMAP restait dans le Trousseau indéfiniment.
+        // Without this the IMAP password stayed in the keychain forever.
         KeychainStore().delete(for: account)
-        // Idem pour les UIDs déjà téléchargés : le dossier d'état porte l'UUID du compte,
-        // que plus rien ne référence une fois celui-ci parti — il restait sur le disque
-        // pour toujours.
+        // Same for the already-downloaded UIDs: the state directory is keyed by the
+        // account UUID, which nothing references once the account is gone — it stayed on
+        // disk forever.
         StateStore().wipeAccount(accountID: account.id)
         if selectedAccountID == account.id { selectedAccountID = nil }
         save()

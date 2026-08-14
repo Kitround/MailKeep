@@ -152,8 +152,8 @@ struct FolderPickerView: View {
 
             await MainActor.run { phase = .listing }
             let folders = try await client.listFolders()
-            // La liste est déjà en main : un LOGOUT qui échoue ne doit pas la faire
-            // disparaître derrière un écran d'erreur.
+            // The list is already in hand: a failing LOGOUT must not make it vanish behind
+            // an error screen.
             try? await client.logout()
 
             await MainActor.run {
@@ -178,8 +178,8 @@ struct FolderPickerView: View {
                 result.append(MailFolder(name: name))
             }
         }
-        // Un dossier déjà configuré mais absent du LIST courant (serveur qui a hoqueté,
-        // droits temporairement retirés) était supprimé sans un mot — on le garde.
+        // A folder already configured but missing from the current LIST (server hiccup,
+        // permissions briefly revoked) was dropped without a word — it is kept instead.
         for folder in account.folders where !availableFolders.contains(folder.name) {
             result.append(folder)
         }

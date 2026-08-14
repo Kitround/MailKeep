@@ -9,8 +9,8 @@ final class SchedulerService: ObservableObject {
     func start(appState: AppState, engine: BackupEngine) {
         self.appState = appState
         self.engine = engine
-        // start() est appelé depuis le onAppear de la fenêtre : une seconde fenêtre
-        // lançait un deuxième timer, donc deux backups planifiés simultanés.
+        // start() is called from the window's onAppear: a second window started a second
+        // timer, hence two scheduled backups running at once.
         guard timer == nil else { return }
 
         // Check every minute if a scheduled backup is due
@@ -20,8 +20,8 @@ final class SchedulerService: ObservableObject {
             }
         }
         RunLoop.main.add(timer!, forMode: .common)
-        // Pas de vérification au démarrage — l'utilisateur relance manuellement
-        // depuis l'historique si un backup précédent n'a pas pu se terminer.
+        // No check at startup — the user restarts manually from the history if an earlier
+        // backup could not finish.
     }
 
     func stop() {

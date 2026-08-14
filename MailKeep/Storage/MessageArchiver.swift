@@ -240,8 +240,8 @@ enum MessageArchiver {
         if !message.cc.isEmpty   { headers += "Cc: \(encodeHeader(message.cc))\r\n" }
         headers += "Subject: \(encodeHeader(message.subject))\r\n"
         if let date = message.date { headers += "Date: \(rfc2822Date(date))\r\n" }
-        // Identité d'origine conservée : sans elle, réimporter l'archive crée un doublon
-        // du mail et le détache de son fil de discussion.
+        // The original identity is kept: without it, re-importing the archive creates a
+        // duplicate of the message and detaches it from its thread.
         headers += "Message-ID: \(headerToken(message.messageID) ?? "<\(UUID().uuidString)@mailkeep>")\r\n"
         if let inReplyTo = headerToken(message.inReplyTo) { headers += "In-Reply-To: \(inReplyTo)\r\n" }
         if let references = headerToken(message.references) { headers += "References: \(references)\r\n" }
@@ -287,8 +287,8 @@ enum MessageArchiver {
         return result
     }
 
-    /// Valeur d'en-tête reprise telle quelle (Message-ID, In-Reply-To, References) :
-    /// vidée des retours à la ligne, qui permettraient d'injecter d'autres en-têtes.
+    /// A header value carried over as-is (Message-ID, In-Reply-To, References), stripped
+    /// of line breaks, which would otherwise allow injecting further headers.
     private static func headerToken(_ value: String?) -> String? {
         guard let raw = value else { return nil }
         let clean = raw.replacingOccurrences(of: "\r", with: "")
@@ -333,8 +333,8 @@ enum MessageArchiver {
         return out
     }
 
-    /// Alloué une fois : `DateFormatter` coûte cher et l'archivage en crée un par message.
-    /// Jamais muté après construction, donc lisible depuis plusieurs tâches à la fois.
+    /// Allocated once: `DateFormatter` is expensive and archiving built one per message.
+    /// Never mutated after construction, so it is safe to read from several tasks at once.
     private static let rfc2822Formatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")

@@ -39,7 +39,7 @@ struct FolderDetailView: View {
     @State private var showRestore = false
     @State private var showDeleteConfirm = false
 
-    /// Vrai uniquement si CE dossier précis est en cours de backup.
+    /// True only when THIS exact folder is being backed up.
     private var isFolderBacking: Bool {
         appState.activeProgress.values.contains {
             $0.accountID == account.id && $0.folderName == folder.name
@@ -84,7 +84,7 @@ struct FolderDetailView: View {
                     .buttonStyle(.bordered)
                 }
 
-                // Import — jamais bloqué par un backup d'un autre dossier
+                // Import — never blocked by another folder's backup
                 Button {
                     backupEngine.importMbox(for: folder, on: account)
                 } label: {

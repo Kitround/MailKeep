@@ -10,13 +10,13 @@ struct EmailDetailView: View {
     @State private var exportError: String? = nil
     @State private var showArchived = false
     @State private var archivedHTML: String? = nil
-    /// Résolue une fois par message, hors du corps de la vue : le test d'existence
-    /// tournait à chaque rendu, et sur le main actor.
+    /// Resolved once per message, outside the view body: the existence check used to run
+    /// on every render, and on the main actor.
     @State private var archivedFileURL: URL? = nil
 
     /// Path to the self-contained .eml archive for this message, if it exists.
-    /// Le nom de base vient de `MboxStore`, seul endroit qui décide comment une archive
-    /// s'appelle — recopié ici, il avait déjà divergé sur les noms contenant « .mbox ».
+    /// The base name comes from `MboxStore`, the one place that decides what an archive is
+    /// called — copied here, it had already diverged on names containing ".mbox".
     nonisolated private static func archiveURL(for email: EmailMessage) -> URL? {
         guard let mbox = email.mboxFileURL, email.mboxLength > 0 else { return nil }
         let base = MboxStore.archiveBaseName(mbox.lastPathComponent)
@@ -37,14 +37,14 @@ struct EmailDetailView: View {
             bodySection
         }
         .navigationTitle(email.subject)
-        // Échap referme l'email et rend la page d'actions du dossier.
+        // Esc closes the email and brings back the folder's action page.
         .onExitCommand { appState.selectedEmail = nil }
         .onChange(of: email.id) { _, _ in
             allowRemoteContent = false
             showArchived = false
             archivedHTML = nil
-            // Remise à zéro immédiate : la tâche qui la recalcule s'exécute une frame plus
-            // tard, et d'ici là « Copie archivée » aurait ouvert celle du message précédent.
+            // Cleared immediately: the task that recomputes it runs a frame later, and
+            // until then "Copie archivée" would have opened the previous message's.
             archivedFileURL = nil
         }
         .task(id: email.id) {
@@ -97,8 +97,8 @@ struct EmailDetailView: View {
 
     private func exportEML() {
         Task {
-            // Lecture hors du main actor : un message à grosses pièces jointes fige
-            // l'interface le temps de relire son bloc dans le mbox.
+            // Read off the main actor: a message with large attachments freezes the
+            // interface for as long as its block takes to re-read from the mbox.
             let email = email
             let data: Data? = await Task.detached {
                 if let url = email.mboxFileURL, email.mboxLength > 0 {

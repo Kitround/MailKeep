@@ -2,13 +2,13 @@ import SwiftUI
 
 @main
 struct MailKeepApp: App {
-    // `@State` et non `@StateObject` : volontaire. `@StateObject` abonne le corps de
-    // l'App à `objectWillChange`, donc **toute** la scène — dont `.commands`, c'est-à-dire
-    // la barre de menus — était reconstruite à chaque écriture de progression. Menu ouvert,
-    // AppKit tourne en boucle de suivi modale : chaque changement d'items appelle
-    // `menuNeedsUpdate`, qui rend la vue, qui change encore les items… jusqu'au
-    // débordement de pile. `@State` garde les objets en vie sans s'y abonner ; les vues
-    // qui en ont besoin s'abonnent individuellement via `@EnvironmentObject`.
+    // `@State` and not `@StateObject`, deliberately. `@StateObject` subscribes the App
+    // body to `objectWillChange`, so the **whole** scene — including `.commands`, i.e. the
+    // main menu — was rebuilt on every progress write. With a menu open AppKit runs a modal
+    // tracking loop where any item change calls `menuNeedsUpdate`, which renders the view,
+    // which changes the items again… until the stack overflows. `@State` keeps the objects
+    // alive without subscribing; the views that need them subscribe individually through
+    // `@EnvironmentObject`.
     @State private var appState = AppState()
     @State private var backupEngine = BackupEngine()
     @State private var scheduler = SchedulerService()
@@ -42,18 +42,18 @@ struct MailKeepApp: App {
             }
         }
 
-        // Libellé volontairement figé : le faire dépendre de l'état abonnerait le corps de
-        // l'App à `objectWillChange`, ce que `@State` ci-dessus existe précisément pour
-        // éviter — toute la scène, barre de menus comprise, serait reconstruite à chaque
-        // écriture de progression. L'état vit dans le panneau, qui l'observe seul.
+        // The label is deliberately fixed: deriving it from state would subscribe the App
+        // body to `objectWillChange`, which is exactly what the `@State` above exists to
+        // avoid — the whole scene, main menu included, would be rebuilt on every progress
+        // write. State lives in the panel, which observes it on its own.
         MenuBarExtra("MailKeep", systemImage: "tray.and.arrow.down") {
             MenuBarView()
                 .environmentObject(appState)
                 .environmentObject(backupEngine)
         }
-        // `.window` et non le style `.menu` par défaut : ce dernier construit un vrai
-        // `NSMenu`, dont les mises à jour synchrones et ré-entrantes récursaient jusqu'au
-        // débordement de pile dès qu'un backup écrivait sa progression.
+        // `.window` rather than the default `.menu` style: that one builds a real
+        // `NSMenu`, whose synchronous, re-entrant updates recursed until the stack blew as
+        // soon as a backup started writing progress.
         .menuBarExtraStyle(.window)
 
         Settings {

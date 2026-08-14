@@ -1,8 +1,8 @@
 import SwiftUI
 import AppKit
 
-/// Une entrée de menu décrite une seule fois, rendue soit par SwiftUI (clic droit)
-/// soit par AppKit (bouton « … » de la sidebar).
+/// A menu entry described once, rendered either by SwiftUI (right click) or by AppKit
+/// (the sidebar's "…" button).
 struct MenuAction {
     let title: String
     let enabled: Bool
@@ -27,9 +27,9 @@ struct MenuAction {
 }
 
 extension NSMenu {
-    /// Ouvre un vrai menu macOS au pointeur. Préféré à un `Menu` SwiftUI : celui-ci
-    /// impose son propre chrome, qui décale son glyphe par rapport aux autres icônes
-    /// de la sidebar et le noircit en dark mode.
+    /// Opens a real macOS menu at the pointer. Preferred over a SwiftUI `Menu`, which
+    /// imposes its own chrome — that offsets its glyph from the sidebar's other icons and
+    /// turns it black in dark mode.
     static func popUpAtPointer(items: [MenuAction]) {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -41,7 +41,7 @@ extension NSMenu {
     }
 }
 
-/// `NSMenuItem` qui appelle une closure — AppKit ne sait cibler que des sélecteurs.
+/// An `NSMenuItem` that calls a closure — AppKit can only target selectors.
 private final class ClosureMenuItem: NSMenuItem {
     private let handler: () -> Void
 
@@ -52,33 +52,32 @@ private final class ClosureMenuItem: NSMenuItem {
         isEnabled = action.enabled
     }
 
-    required init(coder: NSCoder) { fatalError("init(coder:) non supporté") }
+    required init(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     @objc private func fire() { handler() }
 }
 
-/// Largeur de la colonne des comptes, mesurée sur ce qu'elle contient.
+/// Width of the account column, measured from what it holds.
 ///
-/// Une `List` n'a pas de largeur intrinsèque : elle remplit ce qu'on lui donne. On mesure
-/// donc les textes réellement affichés — libellés de comptes, adresses, noms de dossiers —
-/// auxquels on ajoute le décor de la ligne : retrait de gauche, et à droite la zone que se
-/// partagent le loader et l'icône d'action, toujours réservée pour que l'apparition du
-/// loader pendant une sauvegarde ne tronque rien.
+/// A `List` has no intrinsic width: it fills whatever it is given. So the text actually on
+/// screen is measured — account labels, addresses, folder names — plus each row's chrome:
+/// the leading inset, and on the trailing side the zone the loader and the action icon
+/// share, always reserved so that a loader appearing mid-backup truncates nothing.
 enum SidebarMetrics {
-    /// Loader + icône d'action + marges : identique pour comptes et dossiers.
+    /// Loader + action icon + margins: identical for accounts and folders.
     private static let trailingZone: CGFloat = 6 + 16 + 6 + SidebarIcon.hit + (SidebarIcon.trailing - SidebarIcon.pad)
-    /// Retrait de gauche d'une ligne de compte : inset (-3) + chevron (16) + espacement (6).
+    /// Leading inset of an account row: inset (-3) + chevron (16) + spacing (6).
     private static let accountLeading: CGFloat = 19
-    /// Retrait de gauche d'une ligne de dossier : inset (41) + icône (16) + espacement (8).
+    /// Leading inset of a folder row: inset (41) + icon (16) + spacing (8).
     private static let folderLeading: CGFloat = 65
-    /// Ligne « Historique » : inset (-3) + icône (16) + espacement (8), marge droite 8.
+    /// The "Historique" row: inset (-3) + icon (16) + spacing (8), trailing margin 8.
     private static let historyChrome: CGFloat = 21 + 8
-    /// Marge du conteneur : une `List` en style sidebar ajoute son propre retrait autour
-    /// des rangées, qui n'apparaît dans aucun inset posé par nos vues. Mesuré à l'écran :
-    /// sans elle, « Boîte de réception » perdait sa fin.
+    /// Container margin: a sidebar-styled `List` adds its own inset around rows, which
+    /// appears in none of the insets our views set. Measured on screen: without it,
+    /// "Boîte de réception" lost its tail.
     private static let listPadding: CGFloat = 28
-    /// Bornes de sécurité : un libellé vide ne doit pas produire une colonne ridicule,
-    /// une adresse à rallonge ne doit pas manger la fenêtre.
+    /// Safety bounds: an empty label must not produce a ridiculous column, and an
+    /// endless address must not eat the window.
     private static let bounds: ClosedRange<CGFloat> = 240...460
 
     static func width(for accounts: [IMAPAccount]) -> CGFloat {
@@ -86,7 +85,7 @@ enum SidebarMetrics {
         for account in accounts {
             let label = account.label.isEmpty ? account.host : account.label
             widest = max(widest, accountLeading + textWidth(label, style: .headline) + trailingZone)
-            // L'adresse commence sous le libellé, au même retrait.
+            // The address starts under the label, at the same inset.
             widest = max(widest, accountLeading + textWidth(account.username, style: .caption1) + trailingZone)
             for folder in account.folders {
                 widest = max(widest, folderLeading + textWidth(folder.displayName, style: .body) + trailingZone)
@@ -101,25 +100,24 @@ enum SidebarMetrics {
     }
 }
 
-/// Métriques partagées des icônes d'action de la sidebar (roue crantée des
-/// comptes, menu « … » des dossiers), pour que les deux colonnes s'alignent.
+/// Shared metrics for the sidebar's action icons (the accounts' gear, the folders' "…"
+/// menu), so that the two columns line up.
 enum SidebarIcon {
-    /// 16 = taille de `.body` (13) + 3, calée à l'œil.
+    /// 16 = `.body` size (13) + 3, set by eye.
     static let font = Font.system(size: 16)
-    /// Marge droite du glyphe, identique pour les deux icônes.
+    /// Trailing margin of the glyph, identical for both icons.
     static let trailing: CGFloat = 8
-    /// Marge cliquable autour du glyphe : 16 + 2×6 = zone de 28.
+    /// Clickable margin around the glyph: 16 + 2×6 = a 28 zone.
     static let pad: CGFloat = 6
-    /// Zone cliquable, et surtout boîte carrée commune : `gearshape` et
-    /// `ellipsis.circle` n'ont pas la même largeur intrinsèque, sans cadre imposé
-    /// leurs centres ne tombent pas au même endroit.
+    /// Hit area, and above all a shared square box: `gearshape` and `ellipsis.circle` do
+    /// not share an intrinsic width, so without an imposed frame their centres land in
+    /// different places.
     static var hit: CGFloat { 16 + 2 * pad }
 }
 
-/// Glyphe d'action de la sidebar : taille, couleurs et zone cliquable élargie par
-/// padding — pas par `frame`, qui pousse un `Menu` borderless à dessiner son bezel.
-/// Partagé pour que roue crantée et menu « … » soient identiques. Survol = couleur
-/// seule, pas de fond.
+/// A sidebar action glyph: size, colours, and a hit area widened by padding — not by
+/// `frame`, which pushes a borderless `Menu` into drawing its bezel. Shared so the gear
+/// and the "…" menu are identical. Hover changes colour only, never the background.
 struct SidebarIconLabel: View {
     let systemName: String
     let isHovered: Bool
@@ -280,8 +278,8 @@ private struct AccountSectionView: View {
             ForEach(account.folders) { folder in
                 FolderRowView(account: account, folder: folder)
                     .id(folder.id)
-                    // trailing 0 : le menu « … » porte lui-même son padding de 8,
-                    // comme la roue crantée du compte, pour que les deux s'alignent.
+                    // trailing 0: the "…" menu carries its own padding of 8, like the
+                    // account's gear, so that the two line up.
                     .listRowInsets(EdgeInsets(top: 3, leading: 41, bottom: 3, trailing: 0))
             }
         }

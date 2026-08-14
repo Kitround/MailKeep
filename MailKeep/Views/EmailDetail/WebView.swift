@@ -57,10 +57,10 @@ struct WebView: NSViewRepresentable {
                 forIdentifier: "mailkeep-block-remote",
                 encodedContentRuleList: Self.blockRulesJSON
             ) { list, _ in
-                // Completion runs on the main thread. Si la compilation échoue, on charge
-                // une version dont les sources distantes sont neutralisées plutôt que le
-                // HTML d'origine : sans règles, celui-ci allait chercher chaque pixel de
-                // suivi — exactement ce que le blocage existe pour empêcher.
+                // Completion runs on the main thread. If compilation fails, load a version
+                // with its remote sources neutralised rather than the original HTML: with no
+                // rules, that one fetched every tracking pixel — exactly what the blocking
+                // exists to prevent.
                 if let list {
                     Self.cachedBlockList = list
                     webView.configuration.userContentController.removeAllContentRuleLists()
@@ -72,8 +72,8 @@ struct WebView: NSViewRepresentable {
             }
         }
 
-        /// Repli sans WebKit : réécrit `src="http…"` / `srcset` en `about:blank`, pour que
-        /// rien ne parte sur le réseau si les règles de blocage n'ont pas pu être compilées.
+        /// WebKit-free fallback: rewrites `src="http…"` / `srcset` to `about:blank`, so
+        /// nothing reaches the network when the blocking rules could not be compiled.
         private static func neutralizingRemoteSources(in html: String) -> String {
             html.replacingOccurrences(
                 of: #"(src|srcset)\s*=\s*["']\s*https?://[^"']*["']"#,
@@ -84,9 +84,9 @@ struct WebView: NSViewRepresentable {
 
         // Block external navigation — open clicked links in the browser; deny any
         // other remote navigation (e.g. <meta http-equiv="refresh"> redirects).
-        /// Seuls ces schémas sont transmis au système sur clic. Un mail peut contenir
-        /// n'importe quel lien : `file://`, `smb://` ou un schéma applicatif ouvriraient
-        /// une ressource locale ou une autre app d'un simple clic.
+        /// Only these schemes are handed to the system on a click. A message can carry any
+        /// link at all: `file://`, `smb://` or an app scheme would open a local resource or
+        /// another app from a single click.
         private static let openableSchemes: Set<String> = ["http", "https", "mailto"]
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,

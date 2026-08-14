@@ -36,16 +36,16 @@ struct MboxStore {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
-    /// Vrai si le fichier est un .mbox de CE dossier précis.
-    /// Un simple préfixe ne suffit pas : `sanitize` remplace `/` par `_`, donc
-    /// « INBOX » attraperait « INBOX_Travail_2026-08.mbox » (dossier INBOX/Travail)
-    /// et « INBOXOLD_2026-08.mbox ». Le suffixe doit être une période ou un import.
+    /// True when the file is a .mbox belonging to THIS exact folder.
+    /// A bare prefix is not enough: `sanitize` turns `/` into `_`, so "INBOX" would catch
+    /// "INBOX_Travail_2026-08.mbox" (the INBOX/Travail folder) and "INBOXOLD_2026-08.mbox".
+    /// The suffix has to be either a period or an import stamp.
     static func isMbox(_ filename: String, ofFolder safeFolder: String) -> Bool {
         guard let rest = suffixAfterFolder(filename, safeFolder, extension: "mbox") else { return false }
         return isPeriod(rest) || isImportStamp(rest)
     }
 
-    /// Vrai si le fichier est une archive .eml de CE dossier : « <safe>_<période>_<offset>.eml ».
+    /// True when the file is a .eml archive of THIS folder: "<safe>_<period>_<offset>.eml".
     static func isArchive(_ filename: String, ofFolder safeFolder: String) -> Bool {
         guard let rest = suffixAfterFolder(filename, safeFolder, extension: "eml"),
               let lastUnderscore = rest.lastIndex(of: "_") else { return false }
@@ -55,8 +55,8 @@ struct MboxStore {
         return isPeriod(period) || isImportStamp(period)
     }
 
-    /// « INBOX_2026-08.mbox » + « INBOX » → « 2026-08 ». nil si le nom appartient
-    /// à un autre dossier ou à une autre extension.
+    /// "INBOX_2026-08.mbox" + "INBOX" → "2026-08". nil when the name belongs to another
+    /// folder or to another extension.
     private static func suffixAfterFolder(_ filename: String, _ safeFolder: String, extension ext: String) -> String? {
         let prefix = safeFolder + "_"
         let suffix = "." + ext
@@ -67,14 +67,14 @@ struct MboxStore {
         return String(filename[start..<end])
     }
 
-    /// « 2026-08 »
+    /// "2026-08"
     private static func isPeriod(_ s: String) -> Bool {
         let parts = s.split(separator: "-", omittingEmptySubsequences: false)
         guard parts.count == 2, parts[0].count == 4, parts[1].count == 2 else { return false }
         return parts.allSatisfy { $0.allSatisfy(\.isNumber) }
     }
 
-    /// « imported_20260806_143012 » ou « imported_20260806_143012_2 »
+    /// "imported_20260806_143012" or "imported_20260806_143012_2"
     private static func isImportStamp(_ s: String) -> Bool {
         let parts = s.split(separator: "_", omittingEmptySubsequences: false)
         guard parts.count == 3 || parts.count == 4, parts[0] == "imported" else { return false }
@@ -98,9 +98,9 @@ struct MboxStore {
             .appendingPathComponent("\(archiveBaseName(mboxFilename))_\(offset).eml")
     }
 
-    /// « INBOX_2026-08.mbox » → « INBOX_2026-08 ». Seule l'extension tombe : un
-    /// `replacingOccurrences(of: ".mbox")` mangeait aussi un « .mbox » présent au milieu
-    /// du nom du dossier, et deux dossiers distincts se retrouvaient sur le même fichier.
+    /// "INBOX_2026-08.mbox" → "INBOX_2026-08". Only the extension goes: a
+    /// `replacingOccurrences(of: ".mbox")` also ate a ".mbox" sitting in the middle of the
+    /// folder name, and two distinct folders landed on the same file.
     static func archiveBaseName(_ mboxFilename: String) -> String {
         mboxFilename.hasSuffix(".mbox") ? String(mboxFilename.dropLast(5)) : mboxFilename
     }
@@ -139,8 +139,8 @@ struct MboxStore {
             defer { try? handle.close() }
             let offset = Int64(try handle.seekToEnd())
             try handle.write(contentsOf: output)
-            // Sans ça, un crash laisse un dernier bloc tronqué que l'index référence
-            // pourtant comme complet.
+            // Without this a crash leaves a truncated final block that the index still
+            // references as complete.
             try handle.synchronize()
             return (offset: offset, length: output.count)
         } else {
@@ -326,10 +326,10 @@ struct MboxStore {
 
     static func extractSender(from data: Data) -> String {
         let preview = Data(data.prefix(8192))
-        // Repli latin-1 : les en-têtes ne sont pas toujours de l'UTF-8 valide (vieux
-        // courriers en ISO-8859-1), et la coupure à 8 Ko peut tomber au milieu d'un
-        // caractère multi-octets. Sans repli, tout mail concerné perdait son expéditeur
-        // et sa ligne « From » mbox portait « unknown@unknown ».
+        // latin-1 fallback: headers are not always valid UTF-8 (older ISO-8859-1 mail),
+        // and the 8 KB cut can land mid multi-byte character. Without the fallback, every
+        // affected message lost its sender and its mbox "From" line read
+        // "unknown@unknown".
         let text = String(data: preview, encoding: .utf8)
             ?? String(data: preview, encoding: .isoLatin1)
             ?? ""
@@ -348,9 +348,9 @@ struct MboxStore {
         return "unknown@unknown"
     }
 
-    /// Fichier mensuel dans lequel classer un message, d'après son INTERNALDATE.
-    /// Le mois est celui du fuseau du message, pas celui de la machine : sinon un mail
-    /// du 1er août 00:30 +0200 atterrit dans le fichier de juillet d'un lecteur en UTC-3.
+    /// Which monthly file a message belongs in, from its INTERNALDATE.
+    /// The month is the one in the message's own time zone, not the machine's: otherwise a
+    /// message sent 1 August 00:30 +0200 lands in July's file for a reader on UTC-3.
     static func yearMonth(fromInternalDate internalDate: String) -> (year: Int, month: Int) {
         let trimmed = internalDate.trimmingCharacters(in: .whitespaces)
         var calendar = Calendar(identifier: .gregorian)

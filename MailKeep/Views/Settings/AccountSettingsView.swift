@@ -13,7 +13,7 @@ struct AccountSettingsView: View {
     @State private var testSuccess = false
     @State private var showFolderPicker = false
     @State private var isSaving = false
-    /// Identité au moment de l'ouverture, pour repérer un changement d'identifiant/serveur.
+    /// Identity as of opening, so a changed username or host can be spotted.
     @State private var originalAccount: IMAPAccount? = nil
 
     private let keychain = KeychainStore()
@@ -156,8 +156,8 @@ struct AccountSettingsView: View {
                 let client = IMAPClient()
                 try await client.connect(host: account.host, port: account.port)
                 try await client.login(username: account.username, password: password)
-                // Le test porte sur le serveur et les identifiants, tous deux validés à ce
-                // stade : un LOGOUT qui échoue annonçait « échec » pour une connexion bonne.
+                // The test is about the server and the credentials, both already proven at
+                // this point: a failing LOGOUT reported "failure" for a good connection.
                 try? await client.logout()
                 await MainActor.run {
                     testResult = "Connexion réussie"
@@ -177,8 +177,8 @@ struct AccountSettingsView: View {
     private func save() {
         isSaving = true
         do {
-            // La clé Trousseau est « identifiant@serveur » : renommer l'un des deux
-            // laissait l'ancien mot de passe orphelin dans le Trousseau.
+            // The keychain key is "username@host": renaming either of the two left the
+            // old password orphaned in the keychain.
             if let previous = originalAccount,
                previous.username != account.username || previous.host != account.host {
                 keychain.delete(for: previous)

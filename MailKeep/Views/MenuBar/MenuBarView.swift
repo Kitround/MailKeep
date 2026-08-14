@@ -1,14 +1,13 @@
 import SwiftUI
 
-/// Contenu du compagnon de la barre de menus : état du backup en cours et actions rapides.
+/// Contents of the menu bar companion: current backup state plus the quick actions.
 ///
-/// Rendu dans un panneau (`.menuBarExtraStyle(.window)`), jamais dans un `NSMenu` — et
-/// c'est la raison d'être de ce choix. La version précédente était un menu AppKit qui
-/// relisait `activeProgress` pendant un backup : les mises à jour de menu de macOS sont
-/// synchrones et ré-entrantes, donc chaque écriture de progression rappelait
-/// `menuNeedsUpdate`, qui rendait, qui salissait le menu à nouveau, jusqu'au débordement
-/// de pile. Un panneau SwiftUI n'a pas de graphe de menu à salir : il peut observer l'état
-/// aussi souvent qu'il change.
+/// Rendered in a panel (`.menuBarExtraStyle(.window)`), never in an `NSMenu` — and that is
+/// the whole point of the choice. The previous version was an AppKit menu that re-read
+/// `activeProgress` during a backup: macOS menu updates are synchronous and re-entrant, so
+/// every progress write called `menuNeedsUpdate`, which rendered, which dirtied the menu
+/// again, until the stack blew. A SwiftUI panel has no menu graph to dirty, so it can watch
+/// state as often as it changes.
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var backupEngine: BackupEngine
@@ -22,8 +21,8 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             status
-                // Même retrait que le contenu d'une ligne d'action, pour que le glyphe
-                // d'état tombe sur la verticale des glyphes des boutons.
+                // Same inset as the contents of an action row, so the status glyph lands on
+                // the same vertical as the button glyphs.
                 .padding(.horizontal, MenuBarMetrics.rowPadding + MenuBarMetrics.contentInset)
                 .padding(.vertical, 10)
 
@@ -36,8 +35,8 @@ struct MenuBarView: View {
                 }
                 MenuBarButton("Ouvrir MailKeep", systemImage: "macwindow") {
                     dismiss()
-                    // openWindow recrée la fenêtre si elle a été fermée —
-                    // NSApp.windows.first ne marchait plus dans ce cas.
+                    // openWindow recreates the window when it has been closed —
+                    // NSApp.windows.first no longer worked in that case.
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
                 }
@@ -53,7 +52,7 @@ struct MenuBarView: View {
         .frame(width: 260)
     }
 
-    // MARK: - État
+    // MARK: - State
 
     @ViewBuilder
     private var status: some View {
@@ -64,9 +63,9 @@ struct MenuBarView: View {
                         Text(progress.folderName)
                             .font(.caption.weight(.medium))
                             .lineLimit(1)
-                        // Barre déterminée quand le total est connu, indéterminée pendant
-                        // la connexion et la récupération des UIDs. L'avancement se lit
-                        // sur la barre — le compteur chiffré doublait l'information.
+                        // Determinate once the total is known, indeterminate while
+                        // connecting and fetching UIDs. The bar already carries how far
+                        // along the folder is — a numeric counter said it twice.
                         if progress.total > 0 {
                             ProgressView(value: progress.percentComplete)
                                 .controlSize(.small)
@@ -100,8 +99,8 @@ struct MenuBarView: View {
     @ViewBuilder
     private var lastBackupLabel: some View {
         if let last = appState.backupRuns.last, let finished = last.finishedAt {
-            // `.relative` rend déjà une durée écoulée (« 2 j et 23 h ») : la faire suivre
-            // de « plus tôt » donnait « 2 j et 23 h plus tôt ».
+            // `.relative` already renders elapsed time ("2 j et 23 h"), so following it
+            // with "plus tôt" read as "2 j et 23 h plus tôt".
             (Text("Dernier backup il y a ") + Text(finished, style: .relative))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -114,31 +113,30 @@ struct MenuBarView: View {
     }
 }
 
-// MARK: - Métriques
+// MARK: - Metrics
 
-/// Mesures partagées du panneau. Elles existent pour une seule raison : toutes les icônes
-/// doivent tomber sur la même verticale et faire la même taille, ce qu'aucune valeur posée
-/// ligne par ligne ne garantissait.
+/// Shared measurements for the panel. They exist for one reason: every icon has to land on
+/// the same vertical at the same size, which no value written row by row ever guaranteed.
 private enum MenuBarMetrics {
-    /// Marge du bloc d'actions.
+    /// Padding around the block of actions.
     static let rowPadding: CGFloat = 6
-    /// Marge interne d'une ligne d'action. Additionnée à `rowPadding`, elle donne le retrait
-    /// du glyphe — le même que celui du bloc d'état, qui n'est pas dans une ligne.
+    /// Inner padding of an action row. Added to `rowPadding` it gives the glyph inset —
+    /// the same one the status block uses, which is not inside a row.
     static let contentInset: CGFloat = 8
-    /// Écart entre le glyphe et son libellé.
+    /// Gap between a glyph and its label.
     static let iconGap: CGFloat = 8
-    /// Corps du glyphe.
+    /// Glyph point size.
     static let iconSize: CGFloat = 13
-    /// Boîte carrée commune. Les symboles SF n'ont pas la même largeur intrinsèque —
-    /// « macwindow » fait 18 pt de large, « power » 15 — donc sans cadre imposé leurs
-    /// centres ne tombent pas au même endroit et les libellés partent en escalier.
+    /// Shared square box. SF Symbols do not share an intrinsic width — "macwindow" is 18pt
+    /// wide, "power" 15 — so without an imposed frame their centres land in different
+    /// places and the labels step sideways.
     static let iconBox: CGFloat = 18
 }
 
-/// Glyphe du panneau : même corps et même boîte pour tous, d'où l'alignement.
+/// A panel glyph: one point size and one box for all of them, which is what aligns them.
 ///
-/// Sans `color`, aucune teinte n'est posée et le glyphe hérite de celle de son parent —
-/// c'est ce qui fait passer l'icône d'une action désactivée en tertiaire avec son libellé.
+/// With no `color`, no tint is applied and the glyph inherits its parent's — that is what
+/// greys out a disabled action's icon along with its label.
 private struct MenuBarIcon: View {
     let systemName: String
     var color: Color? = nil
@@ -153,11 +151,10 @@ private struct MenuBarIcon: View {
     }
 }
 
-// MARK: - Ligne d'action
+// MARK: - Action row
 
-/// Ligne cliquable d'un panneau de barre de menus : surlignage au survol, comme un item de
-/// menu. Reprend le fond de survol des lignes de la sidebar, pour que l'app garde un seul
-/// vocabulaire visuel.
+/// A clickable row in a menu bar panel: hover highlight, like a menu item. Reuses the
+/// sidebar rows' hover fill so the app keeps a single visual vocabulary.
 private struct MenuBarButton: View {
     let title: String
     let systemImage: String
@@ -176,8 +173,8 @@ private struct MenuBarButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: MenuBarMetrics.iconGap) {
-                // Pas de couleur imposée : le glyphe suit le `foregroundStyle` de la ligne,
-                // qui passe en tertiaire quand l'action est désactivée.
+                // No colour passed: the glyph follows the row's `foregroundStyle`, which
+                // drops to tertiary when the action is disabled.
                 MenuBarIcon(systemName: systemImage, color: nil)
                 Text(title)
                 Spacer(minLength: 0)
