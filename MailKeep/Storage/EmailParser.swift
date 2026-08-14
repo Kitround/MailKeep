@@ -77,7 +77,18 @@ enum EmailParser {
 
     // MARK: - Body parsing
 
-    private static func parseBodyPart(data: Data, headers: [String: String], into msg: inout EmailMessage) {
+    /// How deep the MIME tree may nest before parsing gives up.
+    ///
+    /// Every level of `multipart` recurses, and the messages being parsed come off an IMAP
+    /// server — hostile input by nature. A message nesting a few thousand multiparts, under
+    /// 1 MB on the wire, drove the recursion straight through the stack guard: SIGSEGV
+    /// while backing up, before the user ever opened the mail. Real mail nests a handful of
+    /// levels; anything past this is malformed or malicious, and its remaining parts are
+    /// dropped rather than followed.
+    private static let maxMIMEDepth = 64
+
+    private static func parseBodyPart(data: Data, headers: [String: String],
+                                      into msg: inout EmailMessage, depth: Int = 0) {
         let contentType = headers["content-type"] ?? "text/plain"
         let ctLower = contentType.lowercased()
         let disposition = headers["content-disposition"] ?? ""
@@ -88,11 +99,12 @@ enum EmailParser {
 
         // Multipart: recurse into all sub-parts
         if ctLower.contains("multipart") {
+            guard depth < maxMIMEDepth else { return }
             let boundary = extractBoundary(from: contentType)
             for partData in splitMultipart(data, boundary: boundary) {
                 let (ph, pb) = splitData(partData)
                 let partHeaders = parseHeaders(toString7bit(ph))
-                parseBodyPart(data: pb, headers: partHeaders, into: &msg)
+                parseBodyPart(data: pb, headers: partHeaders, into: &msg, depth: depth + 1)
             }
             return
         }
@@ -173,12 +185,37 @@ enum EmailParser {
                     if key.contains("*") {
                         raw = raw.removingPercentEncoding ?? raw
                     }
-                    let decoded = decodeHeaderValue(raw)
+                    let decoded = safeFilename(decodeHeaderValue(raw))
                     if !decoded.isEmpty { return decoded }
                 }
             }
         }
         return nil
+    }
+
+    /// Reduces an attachment name to a plain filename, never a path.
+    ///
+    /// The name comes straight out of a message header, so it is attacker-controlled: it
+    /// arrived here containing `../../../../etc/passwd` and kept its separators all the way
+    /// to the save panel. Only the last path component survives, and a leading dot cannot
+    /// turn the result into `..`.
+    ///
+    /// Bidirectional overrides go too: they reverse how the rest of the name is drawn, so a
+    /// file whose real extension is `.exe` can be made to read as `.jpg` on screen. The
+    /// extension the user sees must be the one on disk.
+    private static func safeFilename(_ name: String) -> String {
+        let flattened = name
+            .replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/")
+            .last
+            .map(String.init) ?? ""
+        let cleaned = String(flattened.unicodeScalars.filter { scalar in
+            // C0/C1 controls, and the bidi overrides and isolates (U+202A…U+202E, U+2066…U+2069).
+            !(scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value)
+              || (0x202A...0x202E).contains(scalar.value) || (0x2066...0x2069).contains(scalar.value))
+        }).trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty || cleaned.allSatisfy({ $0 == "." }) { return "" }
+        return cleaned
     }
 
     private static func fallbackFilename(for mimeType: String) -> String {

@@ -64,6 +64,46 @@ for host in ["example.com", "8.8.8.8", "93.184.216.34", "cdn.example.org",
     check(!MessageArchiver.isBlockedHost(host), "allowed: \(host)")
 }
 
+print("attachment names — a header value never becomes a path")
+for (given, expected) in [("../../../../etc/passwd", "passwd"),
+                          ("/etc/passwd", "passwd"),
+                          ("..\\..\\windows\\system32", "system32"),
+                          ("a/b/c.txt", "c.txt"),
+                          ("\u{202E}txt.exe", "txt.exe"),      // bidi override stripped
+                          ("plain.pdf", "plain.pdf")] {
+    let eml = """
+    Content-Type: multipart/mixed; boundary="x"\r
+    \r
+    --x\r
+    Content-Type: application/octet-stream\r
+    Content-Disposition: attachment; filename="\(given)"\r
+    \r
+    Zm9v\r
+    --x--\r
+    """
+    let got = EmailParser.parse(data: Data(eml.utf8)).attachments.first?.filename ?? "(none)"
+    check(got == expected, "\(given.debugDescription) → \(got.debugDescription)")
+}
+
+print("MIME depth — a nested bomb must not take the stack down")
+// Each level wraps the previous one; a few thousand of these used to reach the stack
+// guard and kill the app with SIGSEGV, mid-backup, before anyone opened the message.
+var bomb = "Content-Type: text/plain\r\n\r\nboom\r\n"
+for i in 0..<5_000 {
+    let b = "b\(i)"
+    bomb = "Content-Type: multipart/mixed; boundary=\"\(b)\"\r\n\r\n--\(b)\r\n\(bomb)\r\n--\(b)--\r\n"
+}
+_ = EmailParser.parse(data: Data(bomb.utf8))
+check(true, "5 000 nested multiparts survived")
+// And a legitimately nested message still delivers its body.
+var deep = "Content-Type: text/plain\r\n\r\ndeep\r\n"
+for i in 0..<20 {
+    let b = "d\(i)"
+    deep = "Content-Type: multipart/mixed; boundary=\"\(b)\"\r\n\r\n--\(b)\r\n\(deep)\r\n--\(b)--\r\n"
+}
+check(EmailParser.parse(data: Data(deep.utf8)).bodyText?.contains("deep") == true,
+      "20 nested levels still reach the body")
+
 print(failures == 0 ? "\nAll green." : "\n\(failures) failure(s).")
 if failures > 0 { exit(1) }
 }

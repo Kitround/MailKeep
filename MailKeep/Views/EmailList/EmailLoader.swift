@@ -240,7 +240,10 @@ final class EmailLoader: ObservableObject {
             msg.cc = entry.cc
             msg.subject = entry.subject
             msg.date = entry.date
-            if let dir = accountDir {
+            // The filename is read back from the index file on disk, so it is treated as
+            // data, not as a trusted path: a separator or ".." in it would point the reader
+            // outside the account's own directory.
+            if let dir = accountDir, Self.isPlainFilename(entry.filename) {
                 msg.mboxFileURL = dir.appendingPathComponent(entry.filename)
             }
             msg.mboxOffset = entry.offset
@@ -252,6 +255,11 @@ final class EmailLoader: ObservableObject {
         totalCount = allEmails.count
         updateVisible()
         isLoading = false
+    }
+
+    /// A single path component, and not a way back up the tree.
+    nonisolated private static func isPlainFilename(_ name: String) -> Bool {
+        !name.isEmpty && !name.contains("/") && !name.contains("\\") && name != "." && name != ".."
     }
 
     private func updateVisible() {

@@ -150,53 +150,60 @@ struct MboxStore {
     }
 
     /// CRLF → LF at byte level (lone \r left untouched).
+    ///
+    /// Copies run by run rather than byte by byte. Appending one byte at a time to a `Data`
+    /// carried enough overhead to dominate the whole write path: 185 ms of the 358 ms it
+    /// took to store a 4.6 MB message went here and into `escapeMboxData`.
     private static func normalizeToLF(_ data: Data) -> Data {
         let cr = UInt8(ascii: "\r"), lf = UInt8(ascii: "\n")
         guard data.contains(cr) else { return data }
-        var out = Data()
-        out.reserveCapacity(data.count)
-        var i = data.startIndex
-        while i < data.endIndex {
-            let b = data[i]
-            let next = data.index(after: i)
-            if b == cr, next < data.endIndex, data[next] == lf {
-                out.append(lf)
-                i = data.index(after: next)
-            } else {
-                out.append(b)
-                i = next
+        return data.withUnsafeBytes { src -> Data in
+            var out = [UInt8]()
+            out.reserveCapacity(src.count)
+            var i = 0, chunkStart = 0
+            while i < src.count {
+                if src[i] == cr, i + 1 < src.count, src[i + 1] == lf {
+                    out.append(contentsOf: UnsafeRawBufferPointer(rebasing: src[chunkStart..<i]))
+                    out.append(lf)
+                    i += 2
+                    chunkStart = i
+                } else {
+                    i += 1
+                }
             }
+            if chunkStart < src.count {
+                out.append(contentsOf: UnsafeRawBufferPointer(rebasing: src[chunkStart...]))
+            }
+            return Data(out)
         }
-        return out
     }
 
     /// mboxo escaping at byte level: prepend ">" to any line matching />*From / .
+    /// Whole lines are copied at once — see `normalizeToLF` for why.
     private static func escapeMboxData(_ data: Data) -> Data {
-        let fromBytes = Array("From ".utf8)
         let gt = UInt8(ascii: ">"), nl = UInt8(ascii: "\n")
-        var out = Data()
-        out.reserveCapacity(data.count + 64)
-        var i = data.startIndex
-        while i < data.endIndex {
-            // Inspect line start: skip leading '>' then test for "From "
-            var j = i
-            while j < data.endIndex && data[j] == gt { j = data.index(after: j) }
-            var isFrom = true
-            var k = j
-            for fb in fromBytes {
-                guard k < data.endIndex, data[k] == fb else { isFrom = false; break }
-                k = data.index(after: k)
+        let from = Array("From ".utf8)
+        return data.withUnsafeBytes { src -> Data in
+            var out = [UInt8]()
+            out.reserveCapacity(src.count + 64)
+            var lineStart = 0
+            while lineStart < src.count {
+                var lineEnd = lineStart
+                while lineEnd < src.count && src[lineEnd] != nl { lineEnd += 1 }
+                if lineEnd < src.count { lineEnd += 1 }     // take the newline with the line
+                // Inspect line start: skip leading '>' then test for "From "
+                var j = lineStart
+                while j < src.count && src[j] == gt { j += 1 }
+                var isFrom = j + from.count <= src.count
+                if isFrom {
+                    for (n, fb) in from.enumerated() where src[j + n] != fb { isFrom = false; break }
+                }
+                if isFrom { out.append(gt) }
+                out.append(contentsOf: UnsafeRawBufferPointer(rebasing: src[lineStart..<lineEnd]))
+                lineStart = lineEnd
             }
-            if isFrom { out.append(gt) }
-            // Copy the line through its newline
-            while i < data.endIndex {
-                let b = data[i]
-                out.append(b)
-                i = data.index(after: i)
-                if b == nl { break }
-            }
+            return Data(out)
         }
-        return out
     }
 
     // MARK: - Read
@@ -391,33 +398,34 @@ struct MboxStore {
         return after < data.endIndex ? Data(data[after...]) : Data()
     }
 
+    /// Reverses the mboxo escaping: one ">" comes off any line matching />+From / .
+    /// Line-at-a-time copies, for the same reason as `escapeMboxData`.
     private static func unescapeMboxData(_ data: Data) -> Data {
         guard data.contains(UInt8(ascii: ">")) else { return data }
-        var result = Data()
-        result.reserveCapacity(data.count)
-        var i = data.startIndex
-        let gt = UInt8(ascii: ">")
-        let nl = UInt8(ascii: "\n")
-        let f  = UInt8(ascii: "F")
-
-        while i < data.endIndex {
-            let lineStart = i
-            var gts = 0
-            while i < data.endIndex && data[i] == gt { gts += 1; i = data.index(after: i) }
-            if gts > 0 && i < data.endIndex && data[i] == f {
-                let fromPrefix = Data("From ".utf8)
-                if data[i...].starts(with: fromPrefix) {
-                    result.append(Data(repeating: gt, count: gts - 1))
-                    while i < data.endIndex && data[i] != nl { result.append(data[i]); i = data.index(after: i) }
-                    if i < data.endIndex { result.append(nl); i = data.index(after: i) }
-                    continue
+        let gt = UInt8(ascii: ">"), nl = UInt8(ascii: "\n")
+        let from = Array("From ".utf8)
+        return data.withUnsafeBytes { src -> Data in
+            var out = [UInt8]()
+            out.reserveCapacity(src.count)
+            var lineStart = 0
+            while lineStart < src.count {
+                var lineEnd = lineStart
+                while lineEnd < src.count && src[lineEnd] != nl { lineEnd += 1 }
+                if lineEnd < src.count { lineEnd += 1 }
+                var j = lineStart
+                while j < src.count && src[j] == gt { j += 1 }
+                var isFrom = j > lineStart && j + from.count <= src.count
+                if isFrom {
+                    for (n, fb) in from.enumerated() where src[j + n] != fb { isFrom = false; break }
                 }
+                // Dropping the first byte is exactly "one quote fewer": the rest of the
+                // line, remaining quotes included, is copied untouched.
+                let copyFrom = isFrom ? lineStart + 1 : lineStart
+                out.append(contentsOf: UnsafeRawBufferPointer(rebasing: src[copyFrom..<lineEnd]))
+                lineStart = lineEnd
             }
-            i = lineStart
-            while i < data.endIndex && data[i] != nl { result.append(data[i]); i = data.index(after: i) }
-            if i < data.endIndex { result.append(nl); i = data.index(after: i) }
+            return Data(out)
         }
-        return result
     }
 
 }
