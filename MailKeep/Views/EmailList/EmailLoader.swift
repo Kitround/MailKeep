@@ -140,10 +140,10 @@ final class EmailLoader: ObservableObject {
     /// ran on the main actor, freezing the interface for as long as the folder took to walk.
     /// Every access to `self` already goes through `MainActor.run`.
     nonisolated private func performLoad(mboxURLs: [URL], indexURL: URL?, generation: Int) async throws {
-        // Fast path: a JSON index that exists and is not empty
+        // Fast path: a JSON index that exists, is not empty, and still covers the files
         if let idxURL = indexURL {
             let entries = await Task.detached { EmailIndexStore(indexURL: idxURL).load() }.value
-            if !entries.isEmpty {
+            if !entries.isEmpty, Self.indexCovers(mboxURLs, entries: entries) {
                 try Task.checkCancellation()
                 let dir = mboxURLs.first?.deletingLastPathComponent()
                 await MainActor.run { [weak self] in
@@ -255,6 +255,32 @@ final class EmailLoader: ObservableObject {
         totalCount = allEmails.count
         updateVisible()
         isLoading = false
+    }
+
+    /// True when every mbox file is described by the index all the way to its last byte.
+    ///
+    /// The two things a backup writes are flushed at different rates: UIDs every 50
+    /// messages, the index every 250. A run cut short — crash, force quit, power loss —
+    /// therefore leaves a window where messages sit in the mbox, the UID state counts them
+    /// as downloaded so no later run fetches them again, and the index never heard of them.
+    /// The fast path trusted any non-empty index, so those messages stayed invisible for
+    /// good. One `stat` per file against the furthest byte its entries reach sends a
+    /// short index back through the rebuild instead — which also picks up an mbox grown by
+    /// something other than this app.
+    nonisolated static func indexCovers(_ mboxURLs: [URL], entries: [EmailIndexEntry]) -> Bool {
+        var reach: [String: Int64] = [:]
+        for entry in entries {
+            let end = entry.offset + Int64(entry.length)
+            if end > reach[entry.filename] ?? 0 { reach[entry.filename] = end }
+        }
+        for url in mboxURLs {
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+            guard size > 0 else { continue }   // an empty file has nothing to describe
+            // One byte of slack: a rebuilt index stops at the \n before the next "From ",
+            // a backup-written one includes it.
+            guard let covered = reach[url.lastPathComponent], size <= covered + 1 else { return false }
+        }
+        return true
     }
 
     /// A single path component, and not a way back up the tree.

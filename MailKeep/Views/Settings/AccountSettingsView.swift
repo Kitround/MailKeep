@@ -174,6 +174,24 @@ struct AccountSettingsView: View {
         }
     }
 
+    /// Follows the backup files when the account's identity changes.
+    ///
+    /// The backup directory is named after "username@host" while the downloaded-UID state
+    /// is keyed by the account's UUID. Editing either field left every .mbox behind under
+    /// the old name, and the state — which survived the rename — still counted those
+    /// messages as downloaded: the folder read empty and no backup ever refilled it.
+    private func moveBackupDirectory(from previous: IMAPAccount, to updated: IMAPAccount) {
+        guard let base = appState.backupBaseURL else { return }
+        let old = MboxStore.accountDir(baseDir: base, account: previous)
+        let new = MboxStore.accountDir(baseDir: base, account: updated)
+        let fm = FileManager.default
+        guard old != new, fm.fileExists(atPath: old.path) else { return }
+        if !fm.fileExists(atPath: new.path), (try? fm.moveItem(at: old, to: new)) != nil { return }
+        // Could not move — a directory already sits there, or the disk refused. The state
+        // must then stop claiming those messages are backed up, so the next run refills.
+        StateStore().wipeAccount(accountID: updated.id)
+    }
+
     private func save() {
         isSaving = true
         do {
@@ -182,6 +200,7 @@ struct AccountSettingsView: View {
             if let previous = originalAccount,
                previous.username != account.username || previous.host != account.host {
                 keychain.delete(for: previous)
+                moveBackupDirectory(from: previous, to: account)
             }
             try keychain.save(password: password, for: account)
             if isNew {

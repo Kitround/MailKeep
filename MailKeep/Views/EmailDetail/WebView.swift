@@ -89,15 +89,22 @@ struct WebView: NSViewRepresentable {
         /// another app from a single click.
         private static let openableSchemes: Set<String> = ["http", "https", "mailto"]
 
+        /// The only schemes a navigation may actually load. `loadHTMLString(_:baseURL: nil)`
+        /// lands on `about:blank`, and inline `data:` URIs come from our own cid: inlining —
+        /// nothing else has any business navigating here. It used to be the reverse, a deny
+        /// list holding only http(s): a `<meta http-equiv="refresh">` or a redirect pointing
+        /// at `file://`, `smb://` or an app's own scheme fell through to `.allow`.
+        private static let loadableSchemes: Set<String> = ["about", "data"]
+
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            let scheme = action.request.url?.scheme?.lowercased()
             if action.navigationType == .linkActivated, let url = action.request.url {
-                if let scheme = url.scheme?.lowercased(), Self.openableSchemes.contains(scheme) {
+                if let scheme, Self.openableSchemes.contains(scheme) {
                     NSWorkspace.shared.open(url)
                 }
                 decisionHandler(.cancel)
-            } else if let scheme = action.request.url?.scheme?.lowercased(),
-                      scheme == "http" || scheme == "https" {
+            } else if let scheme, !Self.loadableSchemes.contains(scheme) {
                 decisionHandler(.cancel)
             } else {
                 decisionHandler(.allow)

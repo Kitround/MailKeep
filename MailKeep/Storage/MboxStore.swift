@@ -13,7 +13,12 @@ struct MboxStore {
         return f
     }
     private static let imapInFormatter   = makeFormatter("d-MMM-yyyy HH:mm:ss Z")
-    private static let ctimeOutFormatter = makeFormatter("EEE MMM dd HH:mm:ss yyyy")
+    // UTC, like the `ctimeInFormatter` that reads it back. It used to format in the
+    // machine's own time zone while the reader parsed as UTC, so every restored message
+    // came back shifted by the local offset — two hours in Paris, up to fourteen
+    // elsewhere, and a different number on either side of a DST change. The ctime in an
+    // mbox "From " line carries no zone field, so the only portable reading is UTC.
+    private static let ctimeOutFormatter = makeFormatter("EEE MMM dd HH:mm:ss yyyy", utc: true)
     private static let ctimeInFormatter  = makeFormatter("EEE MMM dd HH:mm:ss yyyy", utc: true)
     private static let imapOutFormatter  = makeFormatter("dd-MMM-yyyy HH:mm:ss Z", utc: true)
 
@@ -166,6 +171,38 @@ struct MboxStore {
                     out.append(contentsOf: UnsafeRawBufferPointer(rebasing: src[chunkStart..<i]))
                     out.append(lf)
                     i += 2
+                    chunkStart = i
+                } else {
+                    i += 1
+                }
+            }
+            if chunkStart < src.count {
+                out.append(contentsOf: UnsafeRawBufferPointer(rebasing: src[chunkStart...]))
+            }
+            return Data(out)
+        }
+    }
+
+    /// LF → CRLF at byte level, leaving an existing CRLF alone.
+    ///
+    /// The mbox on disk holds LF line endings — `normalizeToLF` puts them there on the way
+    /// in, which is what every mbox tool expects. The wire does not: an IMAP APPEND hands
+    /// the server an RFC 5322 message, whose lines end with CRLF. Restored messages went up
+    /// with bare LFs and it was left to each server to guess, MIME boundaries included.
+    /// Same run-by-run copy as `normalizeToLF`, and a no-op on data that is already CRLF.
+    static func normalizeToCRLF(_ data: Data) -> Data {
+        let cr = UInt8(ascii: "\r"), lf = UInt8(ascii: "\n")
+        guard data.contains(lf) else { return data }
+        return data.withUnsafeBytes { src -> Data in
+            var out = [UInt8]()
+            out.reserveCapacity(src.count + src.count / 32)
+            var i = 0, chunkStart = 0
+            while i < src.count {
+                if src[i] == lf, i == 0 || src[i - 1] != cr {
+                    out.append(contentsOf: UnsafeRawBufferPointer(rebasing: src[chunkStart..<i]))
+                    out.append(cr)
+                    out.append(lf)
+                    i += 1
                     chunkStart = i
                 } else {
                     i += 1
@@ -347,11 +384,32 @@ struct MboxStore {
                 if let open = value.lastIndex(of: "<"),
                    let close = value.lastIndex(of: ">"),
                    open < close {
-                    return String(value[value.index(after: open)..<close])
+                    return senderToken(String(value[value.index(after: open)..<close]))
                 }
-                return value.isEmpty ? "unknown@unknown" : value
+                return senderToken(value)
             }
         }
+        return "unknown@unknown"
+    }
+
+    /// Reduces a `From:` header value to something that can stand in an mbox separator line.
+    ///
+    /// That line is `From <sender> <ctime>` and it is read back token by token, so the
+    /// sender has to be exactly one token. Two things broke it:
+    ///
+    /// - `components(separatedBy: "\n")` leaves the header's CR on the value, and
+    ///   `.whitespaces` does not trim it — every `From ` line the app ever wrote carried a
+    ///   stray CR in the middle.
+    /// - A header with no angle brackets ("From: Jean Dupont") put spaces in the sender, so
+    ///   the ctime that follows no longer parsed and each restored message lost its
+    ///   original INTERNALDATE.
+    static func senderToken(_ raw: String) -> String {
+        // Control characters (CR included) out, then split on whitespace.
+        let cleaned = String(raw.unicodeScalars.filter { $0.value >= 0x20 && $0.value != 0x7F })
+        let tokens = cleaned.split(whereSeparator: \.isWhitespace)
+        if tokens.count == 1 { return String(tokens[0]) }
+        // Several tokens: only an address is worth keeping — a display name is not a sender.
+        if let addr = tokens.first(where: { $0.contains("@") }) { return String(addr) }
         return "unknown@unknown"
     }
 

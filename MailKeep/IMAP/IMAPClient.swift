@@ -200,7 +200,11 @@ actor IMAPClient {
 
     // MARK: - Append (restore)
 
-    func appendMessage(to folder: String, data: Data, internalDate: String?) async throws {
+    func appendMessage(to folder: String, data rawData: Data, internalDate: String?) async throws {
+        // The mbox on disk stores LF line endings; RFC 5322 — and so the message this
+        // literal carries — wants CRLF. The byte count below is taken after the fix, so
+        // the literal size and what is actually sent stay in step.
+        let data = MboxStore.normalizeToCRLF(rawData)
         let tag = nextTag()
         let size = data.count
         var cmd = "\(tag) APPEND \(IMAPParser.quote(folder)) (\\Seen)"

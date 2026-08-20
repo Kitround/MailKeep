@@ -155,22 +155,38 @@ enum MessageArchiver {
         if h == "localhost" || h.hasSuffix(".local") || h.hasSuffix(".internal") || h.hasSuffix(".localhost") {
             return true
         }
-        // IPv6 loopback / link-local / unique-local
-        if h == "::1" || h.hasPrefix("fe80:") || h.hasPrefix("fc") || h.hasPrefix("fd") || h.hasPrefix("::ffff:") {
-            return true
+        // IPv6, parsed rather than prefix-matched. The prefixes this used to test — "fc",
+        // "fd" — match plain domain names just as well, and every host from fcbank.com to
+        // fdj.fr had its images refused. Parsing also catches the spellings a prefix test
+        // never saw: "0:0:0:0:0:0:0:1" is ::1, and "::ffff:7f00:1" is 127.0.0.1.
+        if let b = ipv6Bytes(h) {
+            if b.allSatisfy({ $0 == 0 }) { return true }                    // ::
+            if b.dropLast().allSatisfy({ $0 == 0 }) && b[15] == 1 { return true }  // ::1
+            if b[0] == 0xFE && (b[1] & 0xC0) == 0x80 { return true }        // fe80::/10 link-local
+            if (b[0] & 0xFE) == 0xFC { return true }                        // fc00::/7 unique-local
+            // IPv4-mapped (::ffff:a.b.c.d) — judged by the IPv4 rules below.
+            if b[0..<10].allSatisfy({ $0 == 0 }), b[10] == 0xFF, b[11] == 0xFF {
+                return isBlockedIPv4(b[12], b[13])
+            }
+            return false
         }
         // IPv4 literal, in whatever form. `inet_aton` — the same parser the network
         // stack uses — accepts far more than dotted-quad: "2130706433", "0177.0.0.1"
         // and "127.1" all reach 127.0.0.1, and each one walked straight past a
         // dotted-quad-only check.
         if let octets = ipv4Octets(h) {
-            let a = octets[0], b = octets[1]
-            if a == 0 || a == 10 || a == 127 { return true }
-            if a == 169 && b == 254 { return true }            // link-local + cloud metadata
-            if a == 172 && (16...31).contains(b) { return true }
-            if a == 192 && b == 168 { return true }
-            if a == 100 && (64...127).contains(b) { return true } // CGNAT
+            return isBlockedIPv4(octets[0], octets[1])
         }
+        return false
+    }
+
+    /// The private / loopback / link-local IPv4 ranges, from the first two octets.
+    private static func isBlockedIPv4(_ a: UInt8, _ b: UInt8) -> Bool {
+        if a == 0 || a == 10 || a == 127 { return true }
+        if a == 169 && b == 254 { return true }               // link-local + cloud metadata
+        if a == 172 && (16...31).contains(b) { return true }
+        if a == 192 && b == 168 { return true }
+        if a == 100 && (64...127).contains(b) { return true }  // CGNAT
         return false
     }
 
@@ -184,6 +200,15 @@ enum MessageArchiver {
         guard inet_aton(host, &addr) != 0 else { return nil }
         let raw = UInt32(bigEndian: addr.s_addr)
         return [UInt8(raw >> 24 & 0xFF), UInt8(raw >> 16 & 0xFF), UInt8(raw >> 8 & 0xFF), UInt8(raw & 0xFF)]
+    }
+
+    /// The sixteen bytes of an IPv6 literal, or nil when the host is not one at all.
+    private static func ipv6Bytes(_ host: String) -> [UInt8]? {
+        // A zone index ("fe80::1%en0") is not part of the address itself.
+        let addressPart = host.split(separator: "%", maxSplits: 1).first.map(String.init) ?? host
+        var addr = in6_addr()
+        guard inet_pton(AF_INET6, addressPart, &addr) == 1 else { return nil }
+        return withUnsafeBytes(of: &addr) { [UInt8]($0) }
     }
 
     /// Identifies an image strictly from its leading magic bytes.

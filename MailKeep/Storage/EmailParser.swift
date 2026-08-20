@@ -87,6 +87,14 @@ enum EmailParser {
     /// dropped rather than followed.
     private static let maxMIMEDepth = 64
 
+    /// How many parts one message may contribute as attachments.
+    ///
+    /// `maxMIMEDepth` bounds how deep the tree goes, nothing bounded how wide it is: a 1 MB
+    /// message made of 20 000 sibling parts parsed in a quarter of a second and left 20 000
+    /// decoded buffers in memory, one chip each in the viewer. Depth and breadth are the
+    /// same attack, and real mail carries a few dozen parts at most.
+    private static let maxAttachments = 200
+
     private static func parseBodyPart(data: Data, headers: [String: String],
                                       into msg: inout EmailMessage, depth: Int = 0) {
         let contentType = headers["content-type"] ?? "text/plain"
@@ -102,6 +110,7 @@ enum EmailParser {
             guard depth < maxMIMEDepth else { return }
             let boundary = extractBoundary(from: contentType)
             for partData in splitMultipart(data, boundary: boundary) {
+                guard msg.attachments.count < maxAttachments else { return }
                 let (ph, pb) = splitData(partData)
                 let partHeaders = parseHeaders(toString7bit(ph))
                 parseBodyPart(data: pb, headers: partHeaders, into: &msg, depth: depth + 1)
@@ -111,7 +120,8 @@ enum EmailParser {
 
         // Explicit attachment disposition → collect as attachment
         if dispLower.hasPrefix("attachment") {
-            if let att = makeAttachment(data: data, contentType: contentType,
+            if msg.attachments.count < maxAttachments,
+               let att = makeAttachment(data: data, contentType: contentType,
                                         disposition: disposition, encoding: transferEncoding,
                                         contentID: headers["content-id"]) {
                 msg.attachments.append(att)
@@ -135,7 +145,8 @@ enum EmailParser {
 
         // Non-text, non-multipart (image/*, application/*, etc.) → attachment.
         // Inline images (cid:) keep their Content-ID so the archiver can resolve them.
-        if let att = makeAttachment(data: data, contentType: contentType,
+        if msg.attachments.count < maxAttachments,
+           let att = makeAttachment(data: data, contentType: contentType,
                                     disposition: disposition, encoding: transferEncoding,
                                     contentID: headers["content-id"]) {
             msg.attachments.append(att)
@@ -156,9 +167,11 @@ enum EmailParser {
         let decoded: Data
         switch encoding {
         case "base64":
-            let text = (String(data: data, encoding: .ascii) ?? "")
-                .components(separatedBy: .newlines).joined()
-            decoded = Data(base64Encoded: text, options: .ignoreUnknownCharacters) ?? data
+            // Decoded straight from the bytes. Going through `String(encoding: .ascii)`
+            // first returned nil on any 8-bit byte — a single stray one in the base64
+            // stream emptied the buffer, and the attachment was dropped without a word.
+            // `.ignoreUnknownCharacters` skips the newlines and whatever else is in there.
+            decoded = Data(base64Encoded: data, options: .ignoreUnknownCharacters) ?? data
         case "quoted-printable":
             decoded = decodeQP(data)
         default:
@@ -353,9 +366,10 @@ enum EmailParser {
     private static func decodeBody(_ data: Data, encoding: String, charset: String) -> String {
         switch encoding {
         case "base64":
-            let text = String(data: data, encoding: .ascii) ?? ""
-            let cleaned = text.components(separatedBy: .newlines).joined()
-            if let decoded = Data(base64Encoded: cleaned, options: .ignoreUnknownCharacters) {
+            // Byte level, for the same reason as in `makeAttachment`: one 8-bit byte in the
+            // base64 stream used to blank the whole body.
+            if let decoded = Data(base64Encoded: data, options: .ignoreUnknownCharacters),
+               !decoded.isEmpty {
                 return bytesToString(decoded, charset: charset)
             }
             return bytesToString(data, charset: charset)

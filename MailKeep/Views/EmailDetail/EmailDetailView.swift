@@ -205,6 +205,10 @@ struct EmailDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
+                        if !allowRemoteContent {
+                            Button("Charger les images restantes") { allowRemoteContent = true }
+                                .controlSize(.small)
+                        }
                         Button("Version originale") { showArchived = false }
                             .controlSize(.small)
                     }
@@ -213,10 +217,12 @@ struct EmailDetailView: View {
                     .background(.quaternary.opacity(0.5))
                     Divider()
                     if let html = archivedHTML {
-                        // Embedded images (cid) render offline; any image that couldn't be
-                        // fetched at backup time stays a remote URL — allow it to load here
-                        // since the user opted into the full archive.
-                        WebView(html: html, allowRemoteContent: true)
+                        // Blocked by default here too. The embedded cid: images are the whole
+                        // point of the archive and render offline; what stays a remote URL is
+                        // what the archiver refused — including the beacons that answered with
+                        // something that was not an image. Loading those on open would have
+                        // fired the exact trackers the viewer exists to stop.
+                        WebView(html: html, allowRemoteContent: allowRemoteContent)
                     } else {
                         ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                     }

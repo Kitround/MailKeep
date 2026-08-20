@@ -9,6 +9,7 @@ struct AccountRowView: View {
 
     @State private var isHovered = false
     @State private var gearHovered = false
+    @State private var showDeleteConfirm = false
 
     private var isBacking: Bool {
         appState.activeProgress.values.contains { $0.accountID == account.id }
@@ -66,8 +67,25 @@ struct AccountRowView: View {
             .disabled(appState.isRunningBackup)
             Divider()
             Button("Supprimer", role: .destructive) {
+                showDeleteConfirm = true
+            }
+            .disabled(isBacking)
+        }
+        // Removing an account drops its keychain password and its downloaded-UID state:
+        // nothing comes back, and the next backup re-downloads the whole mailbox. Every
+        // other irreversible action in the app asks first; this one went through on the
+        // click.
+        .confirmationDialog(
+            "Supprimer le compte « \(account.label.isEmpty ? account.host : account.label) » ?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Supprimer", role: .destructive) {
                 appState.removeAccount(account)
             }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("Le mot de passe enregistré dans le trousseau et le suivi des messages déjà téléchargés seront effacés. Les fichiers .mbox déjà sauvegardés restent sur le disque.")
         }
     }
 
